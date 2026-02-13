@@ -2,6 +2,8 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\EditProfile;
+use Filament\Enums\UserMenuPosition;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -28,6 +30,8 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->profile(EditProfile::class, isSimple: false)
+            ->userMenu(position: UserMenuPosition::Sidebar)
             ->colors([
                 'primary' => '#1d6362',
                 'success' => '#6b9a34',
