@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "sgi-silo",
+  "private_key_id": "f1657fb67f5b92392e953b6eb20b670aea1b3cb8",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDX3/A+qi856mkD\n4mn1ByrmVOHgoQXg6TflOiq05LZHmiGNPu97Pb26naY+L1j3ujU6zDDqEqPL6jhz\nJn9+TE2QIgIRRwIOY07u/YLAvbzZyhYLYgqAYpvKJwGQ2FszOISQYvktzkuOUNpt\ngf2R2Z5urLzPZUXtvy4QLP+oZk5v0nKCMbhbXdTAIFZV8rCRMK3M8rOZoadOOHPj\nSFYXwQQVwAH4FLdFURvC8yz+8fhdzI17Q4D/a5Tcv88GBjloCvCtkOlBXJhWjpcE\nvMvxOTtNfWfdfqSvSSg5os5u2A2rFp8FMQimyfYJHIuOZUeEdbBUTMwZ29CQhyjn\nw+z2UV/zAgMBAAECggEANDIbPqube59oAN5vzCUNhF+ltdB5QWZic3Ra+x4JzMpB\nros3EE9fXo3bslF0a4GEeVEByrbzD8z0FTOLxBfi8SSn51GJ97yfSz3UrZGy5d3s\n8pej/mLZVEmWIVWOx5W0x8yGf0LQFfsKtUum6er6Wbw+cs8D13ZQRuz6a9dAw9xm\n0MKNxnN+yi6d0jLDyCf3kxqS4QgCrn13B7bbRGrv++7LFvfxw4k51ALRaAIwhpxf\ndp/iB7lGoSzQFspkD7NyB4w44A+TK8p/uHI8FIEiBKbKnryqRDJ3XzpNQSnrTjuo\nmryxHdecar/5e05DdpWgzBEO9+AQ5CaBPXMgKjxUAQKBgQDr/5904spiedod3Gu3\n09OI3CT3s5NW7uDytkjwHJpzA3w6mNSaXAhzJrvmhhrPTnvLPaO+FxCj+NFHqTVy\nOhjsVkDvw6rpKi/teeeO3tPzsDvCwgDfrMrNZo7SYUcA288z1ipsAG2veDLLdZZk\n4cm+fj7lKl5C5a/wlT3Z0aOi8wKBgQDqK7KAVCQVKND2xfcwI1+rPXmpOrJDuxIC\n6uxqe+gaYQbCVd0RYndj/naU+XHbVsXaQ5RxIoa3d2h7eoBoJr98prJKQ48wRBdk\nYatjJ5JxK3GrvR9XM/twBoW+aYl7T5IC4J5Qe/TomZDseLYXIImj8HRofM1RHPDJ\nsLRRariPAQKBgCsFZ2Eccr5u7ichZnWVZOt/DjIlh0eCtnkoZ7V10WYEDaJ099TH\n0DaFqh1E9yAxc3nCW9YsSDlMA4Knwvl2w9JZiu7qYX6t1Rzaay7tSgATcWF4kkY0\nLqgw+Po7B4GNkIEnmoYjsdsZ81CJuAfd7TQPuZF3HsXdLyyRWDwb7lOnAoGBANaa\nt1sOQYc2wdL2eGQgdwO7Mi0aQtb5sTcFTycDaSILu6MMB65v/BSi1tAOjv7B1k8C\nUh8g0i9/ejx3dwh8Qk8dghW3Npm4PWvcarJTSMz4UJNgnkFPvWXcRGPN2pYsxRZn\n/g6qmzczzXI56j7lrd6Vdklv3sYwbKeajpZy5LMBAoGBAOraeXKLlrcSqoqQyOsZ\nqY/frzZ7boDvfhFO96vISKzRNGDYnRAYw4ree2B8T+lpxz/989NchF0iMi80IC3j\nXeYbRpin/6wO+bzWdXa5O8LYIkhwnP+i0y7bUFn9QuBPEyd0yffU1/rrI6yT4/O7\nR2qC2zAiB2D698Jp15PUo2ii\n-----END PRIVATE KEY-----\n",
+  "client_email": "laravel-drive@sgi-silo.iam.gserviceaccount.com",
+  "client_id": "109714302126337261536",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/laravel-drive%40sgi-silo.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

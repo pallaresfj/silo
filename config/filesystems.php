@@ -41,7 +41,7 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'url' => rtrim(env('APP_URL', 'http://localhost'), '/') . '/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
@@ -58,6 +58,17 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
             'report' => false,
+        ],
+
+        'google' => [
+            'driver' => 'google',
+            'type' => env('GOOGLE_DRIVE_TYPE', 'service_account'),
+            'project_id' => env('GOOGLE_DRIVE_PROJECT_ID'),
+            'private_key_id' => env('GOOGLE_DRIVE_PRIVATE_KEY_ID'),
+            'private_key' => env('GOOGLE_DRIVE_PRIVATE_KEY'),
+            'client_email' => env('GOOGLE_DRIVE_CLIENT_EMAIL'),
+            'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+            'folder' => env('GOOGLE_DRIVE_FOLDER_ID'),
         ],
 
     ],
