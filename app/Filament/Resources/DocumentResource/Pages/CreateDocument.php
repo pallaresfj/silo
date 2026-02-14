@@ -3,12 +3,17 @@
 namespace App\Filament\Resources\DocumentResource\Pages;
 
 use App\Filament\Resources\DocumentResource;
+use App\Filament\Resources\DocumentResource\Pages\Concerns\UploadsToGoogleDrive;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class CreateDocument extends CreateRecord
 {
+    use UploadsToGoogleDrive;
+
     protected static string $resource = DocumentResource::class;
 
     protected function mutateFormDataBeforeCreate(array $data): array
@@ -25,32 +30,35 @@ class CreateDocument extends CreateRecord
                 $originalName = basename($localPath);
                 $data['file_name'] = $originalName;
 
-                // Build the Drive destination path
+                // Build the Drive folder path: SGI-Doc/{Year}/{CategorySlug}
                 $year = $data['year'] ?? now()->year;
-                $drivePath = "SGI-Doc/{$year}/{$originalName}";
+                $categorySlug = $this->getCategorySlug($data['category_id'] ?? null);
+                $entityFolder = $this->getEntityFolder($data['entity_id'] ?? null);
 
                 try {
-                    // Read file from local temp storage
-                    $fileContents = Storage::disk('local')->readStream($localPath);
+                    // Get file contents from local storage
+                    $fileContents = Storage::disk('local')->get($localPath);
+                    $mimeType = Storage::disk('local')->mimeType($localPath) ?? 'application/octet-stream';
 
-                    // Upload to Google Drive
-                    Storage::disk('google')->writeStream($drivePath, $fileContents);
+                    // Upload directly using Google API and get the file ID
+                    $result = $this->uploadToGoogleDrive(
+                        $originalName,
+                        $fileContents,
+                        $mimeType,
+                        $year,
+                        $categorySlug,
+                        $entityFolder
+                    );
 
-                    // Retrieve Drive file ID using the Google API directly
-                    $driveId = $this->findDriveFileId($originalName, $year);
-
-                    if ($driveId) {
-                        $data['gdrive_id'] = $driveId;
-                        $data['gdrive_url'] = "https://drive.google.com/file/d/{$driveId}/view";
+                    if ($result) {
+                        $data['gdrive_id'] = $result['id'];
+                        $data['gdrive_url'] = $result['webViewLink'] ?? "https://drive.google.com/file/d/{$result['id']}/view";
                     }
-
-                    // Clean up local temp file
-                    Storage::disk('local')->delete($localPath);
 
                     Log::info('Document uploaded to Google Drive', [
                         'file_name' => $originalName,
                         'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
-                        'drive_path' => $drivePath,
+                        'folder' => "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
                     ]);
                 } catch (\Throwable $e) {
                     Log::error('Failed to upload document to Google Drive', [
@@ -59,10 +67,34 @@ class CreateDocument extends CreateRecord
                         'file' => $localPath,
                     ]);
 
-                    $data['file_name'] = $data['file_name'] ?? $originalName;
+                    $this->form->fill([]);
+
+                    Notification::make()
+                        ->danger()
+                        ->title('No se pudo crear el documento')
+                        ->body('No pudimos completar la carga del archivo. Intenta nuevamente.')
+                        ->persistent()
+                        ->send();
+
+                    throw new Halt;
+                } finally {
+                    if (Storage::disk('local')->exists($localPath)) {
+                        Storage::disk('local')->delete($localPath);
+                    }
                 }
             } else {
-                $data['file_name'] = $data['file_name'] ?? 'sin-archivo';
+                Log::warning('Attachment path not found', ['path' => $localPath]);
+
+                $this->form->fill([]);
+
+                Notification::make()
+                    ->danger()
+                    ->title('No se pudo crear el documento')
+                    ->body('No pudimos procesar el archivo seleccionado. Intenta adjuntarlo nuevamente.')
+                    ->persistent()
+                    ->send();
+
+                throw new Halt;
             }
         } else {
             $data['file_name'] = $data['file_name'] ?? 'sin-archivo';
@@ -71,41 +103,8 @@ class CreateDocument extends CreateRecord
         return $data;
     }
 
-    /**
-     * Find a file's Google Drive ID by searching with the Google API.
-     */
-    protected function findDriveFileId(string $fileName, int|string $year): ?string
+    protected function getRedirectUrl(): string
     {
-        try {
-            /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-            $disk = Storage::disk('google');
-            $adapter = $disk->getAdapter();
-
-            // Use the Google Service to search for the file
-            /** @var \Google\Service\Drive $service */
-            $service = $adapter->getService();
-
-            // Search for the file by name (most recently created)
-            $results = $service->files->listFiles([
-                'q' => "name = '{$fileName}' and trashed = false",
-                'fields' => 'files(id, name, createdTime)',
-                'orderBy' => 'createdTime desc',
-                'pageSize' => 1,
-                'supportsAllDrives' => true,
-                'includeItemsFromAllDrives' => true,
-            ]);
-
-            $files = $results->getFiles();
-            if (!empty($files)) {
-                return $files[0]->getId();
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Could not retrieve Drive file ID', [
-                'error' => $e->getMessage(),
-                'fileName' => $fileName,
-            ]);
-        }
-
-        return null;
+        return static::getResource()::getUrl('index');
     }
 }

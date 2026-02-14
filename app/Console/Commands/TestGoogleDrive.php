@@ -2,17 +2,101 @@
 
 namespace App\Console\Commands;
 
+use Google\Service\Drive\DriveFile;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TestGoogleDrive extends Command
 {
-    protected $signature = 'test:google-drive';
+    protected $signature = 'test:google-drive {--direct : Test direct API upload}';
     protected $description = 'Test Google Drive connection and upload';
 
     public function handle()
     {
-        $this->info('=== Testing Google Drive Connection ===');
+        if ($this->option('direct')) {
+            return $this->testDirectApi();
+        }
+
+        return $this->testFlysystemAdapter();
+    }
+
+    protected function testDirectApi(): int
+    {
+        $this->info('=== Testing Direct Google Drive API ===');
+
+        try {
+            $service = $this->getGoogleDriveService();
+            $rootFolderId = config('filesystems.disks.google.folder');
+
+            $this->info("Root folder ID: {$rootFolderId}");
+
+            $folder = $service->files->get($rootFolderId, [
+                'fields' => 'id, name, driveId, shared',
+                'supportsAllDrives' => true,
+            ]);
+            $this->line('Folder name: ' . $folder->getName());
+            $this->line('Shared: ' . ($folder->getShared() ? 'YES' : 'NO'));
+            $this->line('Shared Drive ID: ' . ($folder->getDriveId() ?? 'N/A'));
+            if (!$folder->getDriveId()) {
+                $this->warn('⚠️  Esta carpeta no está en un Shared Drive. Con Service Account la subida puede fallar por cuota.');
+            }
+
+            // Test uploading a file directly
+            $testFileName = 'test-direct-api-' . now()->format('Ymd_His') . '.txt';
+            $testContent = 'Test file created at ' . now()->toDateTimeString();
+
+            $this->info("Uploading test file: {$testFileName}");
+
+            $fileMetadata = new DriveFile([
+                'name' => $testFileName,
+                'parents' => [$rootFolderId],
+            ]);
+
+            $file = $service->files->create($fileMetadata, [
+                'data' => $testContent,
+                'mimeType' => 'text/plain',
+                'uploadType' => 'multipart',
+                'fields' => 'id, webViewLink, name',
+                'supportsAllDrives' => true,
+            ]);
+
+            $this->info('✅ File uploaded successfully!');
+            $this->line("  File ID: {$file->getId()}");
+            $this->line("  File Name: {$file->getName()}");
+            $this->line("  Web Link: {$file->getWebViewLink()}");
+
+            // Cleanup
+            $this->info('Cleaning up test file...');
+            try {
+                $service->files->delete($file->getId(), [
+                    'supportsAllDrives' => true,
+                ]);
+                $this->info('✅ Test file deleted.');
+            } catch (\Throwable $cleanupError) {
+                $this->warn('⚠️  Cleanup failed (not critical): ' . $cleanupError->getMessage());
+            }
+
+            $this->newLine();
+            $this->info('🎉 Direct API test completed successfully!');
+
+            return self::SUCCESS;
+        } catch (\Throwable $e) {
+            $this->error('❌ Direct API test failed!');
+            $this->error("Error: {$e->getMessage()}");
+            Log::error('Google Drive direct API test failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return self::FAILURE;
+        }
+    }
+
+    protected function testFlysystemAdapter(): int
+    {
+        $this->info('=== Testing Google Drive Flysystem Adapter ===');
+        $failed = false;
 
         // Step 1: Check disk class
         try {
@@ -42,53 +126,64 @@ class TestGoogleDrive extends Command
 
         try {
             $this->info("Uploading test file to: {$testPath}");
-            $disk->put($testPath, $testContent);
-            $this->info('✅ File uploaded successfully!');
+            $written = $disk->put($testPath, $testContent);
+            if (!$written) {
+                $this->error('❌ Upload failed: Storage::put devolvió false.');
+                $failed = true;
+            } elseif (!$disk->exists($testPath)) {
+                $this->error('❌ Upload failed: el archivo no existe luego de Storage::put.');
+                $failed = true;
+            } else {
+                $this->info('✅ File uploaded successfully via Flysystem!');
+            }
         } catch (\Throwable $e) {
             $this->error('❌ Upload failed: ' . $e->getMessage());
-            $this->error('   Exception: ' . get_class($e));
-            $this->error('   File: ' . $e->getFile() . ':' . $e->getLine());
-
-            // Try writeStream as alternative
-            $this->info('Trying writeStream instead...');
-            try {
-                $stream = fopen('php://temp', 'r+');
-                fwrite($stream, $testContent);
-                rewind($stream);
-                $disk->writeStream($testPath, $stream);
-                $this->info('✅ writeStream succeeded!');
-            } catch (\Throwable $e2) {
-                $this->error('❌ writeStream also failed: ' . $e2->getMessage());
-                return 1;
-            }
+            $failed = true;
         }
 
-        // Step 4: Try getting metadata
+        // Step 4: Cleanup
         try {
-            $meta = $adapter->getMetadata($testPath);
-            $this->info('✅ Metadata retrieved!');
-            $extra = $meta->extraMetadata();
-            $this->info('   Drive ID: ' . ($extra['id'] ?? 'N/A'));
-            $this->info('   Name: ' . ($extra['name'] ?? 'N/A'));
-            $this->info('   Display path: ' . ($extra['display_path'] ?? 'N/A'));
-            $this->info('   Virtual path: ' . ($extra['virtual_path'] ?? 'N/A'));
-            if (!empty($extra['id'])) {
-                $this->info('   URL: https://drive.google.com/file/d/' . $extra['id'] . '/view');
+            if ($disk->exists($testPath)) {
+                $disk->delete($testPath);
+                $this->info('✅ Test file cleaned up');
+            } else {
+                $this->warn('⚠️  Cleanup skipped: test file was not found.');
             }
-        } catch (\Throwable $e) {
-            $this->error('❌ Metadata failed: ' . $e->getMessage());
-            $this->error('   Exception: ' . get_class($e));
-        }
-
-        // Step 5: Cleanup - delete test file
-        try {
-            $disk->delete($testPath);
-            $this->info('✅ Test file cleaned up');
         } catch (\Throwable $e) {
             $this->warn('⚠️  Cleanup failed (not critical): ' . $e->getMessage());
         }
 
         $this->info('=== Test Complete ===');
-        return 0;
+        $this->newLine();
+        $this->line('Tip: Run with --direct to test the direct API (recommended for uploads)');
+
+        return $failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    protected function getGoogleDriveService(): \Google\Service\Drive
+    {
+        $config = config('filesystems.disks.google');
+
+        $client = new \Google\Client();
+        $client->setScopes([\Google\Service\Drive::DRIVE]);
+
+        $privateKey = $config['private_key'] ?? null;
+
+        if (!$privateKey) {
+            throw new \RuntimeException('Google Drive Service Account not configured.');
+        }
+
+        $client->setAuthConfig([
+            'type' => $config['type'] ?? 'service_account',
+            'project_id' => $config['project_id'] ?? '',
+            'private_key_id' => $config['private_key_id'] ?? '',
+            'private_key' => str_replace('\\n', "\n", $privateKey),
+            'client_email' => $config['client_email'] ?? '',
+            'client_id' => $config['client_id'] ?? '',
+            'auth_uri' => 'https://accounts.google.com/o/oauth2/auth',
+            'token_uri' => 'https://oauth2.googleapis.com/token',
+        ]);
+
+        return new \Google\Service\Drive($client);
     }
 }

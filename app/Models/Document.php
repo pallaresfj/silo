@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Scopes\DocumentVisibilityScope;
+use App\Support\GoogleDriveHelper;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -59,12 +60,13 @@ class Document extends Model
 
     /**
      * Build the Drive folder path for this document.
-     * Pattern: SGI-Doc/{Year}/{CategorySlug}
+     * Pattern: SGI-Doc/{Year}/{CategorySlug}/{EntitySlug}
      */
     public function getDriveFolderAttribute(): string
     {
-        $category = $this->category?->slug ?? 'sin-clasificar';
+        $category = GoogleDriveHelper::normalizeCategorySlug($this->category?->slug);
+        $entity = GoogleDriveHelper::normalizeEntityFolderName($this->entity?->name);
 
-        return "SGI-Doc/{$this->year}/{$category}";
+        return "SGI-Doc/{$this->year}/{$category}/{$entity}";
     }
 }

@@ -12,9 +12,12 @@ class DocumentCategory extends Model
 {
     use HasFactory, HasUuids;
 
+    public const DEFAULT_COLOR = 'primary';
+
     protected $fillable = [
         'name',
         'slug',
+        'color',
         'is_system',
     ];
 
@@ -35,6 +38,16 @@ class DocumentCategory extends Model
                 $category->slug = Str::slug($category->name);
             }
         });
+
+        static::saving(function (DocumentCategory $category): void {
+            $category->color = static::normalizeColor($category->color);
+        });
+
+        static::deleting(function (DocumentCategory $category) {
+            if ($category->documents()->exists()) {
+                throw new \RuntimeException('No se puede eliminar una categoría con documentos asociados.');
+            }
+        });
     }
 
     /**
@@ -43,5 +56,26 @@ class DocumentCategory extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class, 'category_id');
+    }
+
+    public static function colorOptions(): array
+    {
+        return [
+            'primary' => 'Azul',
+            'gray' => 'Gris',
+            'info' => 'Cian',
+            'success' => 'Verde',
+            'warning' => 'Amarillo',
+            'danger' => 'Rojo',
+        ];
+    }
+
+    public static function normalizeColor(?string $color): string
+    {
+        $color = (string) $color;
+
+        return array_key_exists($color, static::colorOptions())
+            ? $color
+            : static::DEFAULT_COLOR;
     }
 }

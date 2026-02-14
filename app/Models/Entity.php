@@ -16,6 +16,15 @@ class Entity extends Model
         'type',
     ];
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Entity $entity) {
+            if ($entity->documents()->exists()) {
+                throw new \RuntimeException('No se puede eliminar una entidad con documentos asociados.');
+            }
+        });
+    }
+
     /**
      * Documents associated with this entity.
      */

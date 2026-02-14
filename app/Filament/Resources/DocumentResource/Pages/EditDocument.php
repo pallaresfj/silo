@@ -3,20 +3,55 @@
 namespace App\Filament\Resources\DocumentResource\Pages;
 
 use App\Filament\Resources\DocumentResource;
+use App\Filament\Resources\DocumentResource\Pages\Concerns\UploadsToGoogleDrive;
+use App\Models\Document;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class EditDocument extends EditRecord
 {
+    use UploadsToGoogleDrive;
+
     protected static string $resource = DocumentResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
-            Actions\ForceDeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->label('Archivar'),
+            Actions\ForceDeleteAction::make()
+                ->label('Eliminar definitivamente')
+                ->modalHeading('Eliminar documento definitivamente')
+                ->modalDescription('Esta acción eliminará el registro y el archivo en Google Drive. No se puede deshacer.')
+                ->modalSubmitActionLabel('Eliminar definitivamente')
+                ->action(function (Actions\ForceDeleteAction $action, Document $record): void {
+                    try {
+                        DocumentResource::deleteFromGoogleDrive($record);
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->danger()
+                            ->title('No se pudo eliminar definitivamente')
+                            ->body('No pudimos eliminar el archivo en Google Drive. Intenta nuevamente.')
+                            ->persistent()
+                            ->send();
+
+                        throw new Halt;
+                    }
+
+                    $result = $action->process(static fn (Document $record): ?bool => $record->forceDelete());
+
+                    if (! $result) {
+                        $action->failure();
+
+                        return;
+                    }
+
+                    $action->success();
+                }),
             Actions\RestoreAction::make(),
         ];
     }
@@ -35,78 +70,78 @@ class EditDocument extends EditRecord
                 $originalName = basename($localPath);
                 $data['file_name'] = $originalName;
 
-                // Build the Drive destination path
+                // Build the Drive folder path: SGI-Doc/{Year}/{CategorySlug}
                 $year = $data['year'] ?? $this->record->year ?? now()->year;
-                $drivePath = "SGI-Doc/{$year}/{$originalName}";
+                $categorySlug = $this->getCategorySlug($data['category_id'] ?? $this->record->category_id ?? null);
+                $entityFolder = $this->getEntityFolder($data['entity_id'] ?? $this->record->entity_id ?? null);
 
                 try {
-                    // Read file from local temp storage
-                    $fileContents = Storage::disk('local')->readStream($localPath);
+                    // Get file contents from local storage
+                    $fileContents = Storage::disk('local')->get($localPath);
+                    $mimeType = Storage::disk('local')->mimeType($localPath) ?? 'application/octet-stream';
 
-                    // Upload to Google Drive
-                    Storage::disk('google')->writeStream($drivePath, $fileContents);
+                    // Upload directly using Google API and get the file ID
+                    $result = $this->uploadToGoogleDrive(
+                        $originalName,
+                        $fileContents,
+                        $mimeType,
+                        $year,
+                        $categorySlug,
+                        $entityFolder
+                    );
 
-                    // Retrieve Drive file ID using the Google API directly
-                    $driveId = $this->findDriveFileId($originalName);
-
-                    if ($driveId) {
-                        $data['gdrive_id'] = $driveId;
-                        $data['gdrive_url'] = "https://drive.google.com/file/d/{$driveId}/view";
+                    if ($result) {
+                        $data['gdrive_id'] = $result['id'];
+                        $data['gdrive_url'] = $result['webViewLink'] ?? "https://drive.google.com/file/d/{$result['id']}/view";
                     }
-
-                    // Clean up local temp file
-                    Storage::disk('local')->delete($localPath);
 
                     Log::info('Document updated on Google Drive', [
                         'file_name' => $originalName,
                         'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
-                        'drive_path' => $drivePath,
+                        'folder' => "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
                     ]);
                 } catch (\Throwable $e) {
                     Log::error('Failed to upload document to Google Drive', [
                         'error' => $e->getMessage(),
                         'file' => $localPath,
                     ]);
+
+                    $this->form->fill($this->record->attributesToArray());
+
+                    Notification::make()
+                        ->danger()
+                        ->title('No se pudo actualizar el documento')
+                        ->body('No pudimos completar la carga del archivo. Intenta nuevamente.')
+                        ->persistent()
+                        ->send();
+
+                    throw new Halt;
+                } finally {
+                    if (Storage::disk('local')->exists($localPath)) {
+                        Storage::disk('local')->delete($localPath);
+                    }
                 }
+            } else {
+                Log::warning('Attachment path not found', ['path' => $localPath]);
+
+                $this->form->fill($this->record->attributesToArray());
+
+                Notification::make()
+                    ->danger()
+                    ->title('No se pudo actualizar el documento')
+                    ->body('No pudimos procesar el archivo seleccionado. Intenta adjuntarlo nuevamente.')
+                    ->persistent()
+                    ->send();
+
+                throw new Halt;
             }
         }
 
         return $data;
     }
 
-    /**
-     * Find a file's Google Drive ID by searching with the Google API.
-     */
-    protected function findDriveFileId(string $fileName): ?string
+    protected function getRedirectUrl(): string
     {
-        try {
-            /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-            $disk = Storage::disk('google');
-            $adapter = $disk->getAdapter();
-
-            /** @var \Google\Service\Drive $service */
-            $service = $adapter->getService();
-
-            $results = $service->files->listFiles([
-                'q' => "name = '{$fileName}' and trashed = false",
-                'fields' => 'files(id, name, createdTime)',
-                'orderBy' => 'createdTime desc',
-                'pageSize' => 1,
-                'supportsAllDrives' => true,
-                'includeItemsFromAllDrives' => true,
-            ]);
-
-            $files = $results->getFiles();
-            if (!empty($files)) {
-                return $files[0]->getId();
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Could not retrieve Drive file ID', [
-                'error' => $e->getMessage(),
-                'fileName' => $fileName,
-            ]);
-        }
-
-        return null;
+        return static::getResource()::getUrl('index');
     }
 }

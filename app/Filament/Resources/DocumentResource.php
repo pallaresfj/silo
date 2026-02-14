@@ -3,7 +3,9 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\DocumentResource\Pages;
+use App\Models\DocumentCategory;
 use App\Models\Document;
+use App\Support\GoogleDriveHelper;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -14,6 +16,7 @@ use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
+use Filament\Notifications\Notification;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -21,12 +24,19 @@ use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
+use Filament\Support\Exceptions\Halt;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
+use Illuminate\Support\Str;
+use Throwable;
 
 class DocumentResource extends Resource
 {
@@ -111,6 +121,11 @@ class DocumentResource extends Resource
                                     ->label('Slug')
                                     ->maxLength(100)
                                     ->helperText('Se genera automáticamente si se deja vacío'),
+                                Select::make('color')
+                                    ->label('Color del badge')
+                                    ->options(DocumentCategory::colorOptions())
+                                    ->default(DocumentCategory::DEFAULT_COLOR)
+                                    ->required(),
                             ]),
 
                         Select::make('entity_id')
@@ -165,28 +180,37 @@ class DocumentResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('title')
-                    ->label('Título')
-                    ->searchable()
-                    ->sortable()
-                    ->limit(50)
-                    ->tooltip(fn($record): string => $record->title),
-
-                TextColumn::make('category.name')
-                    ->label('Categoría')
-                    ->badge()
-                    ->color('primary'),
-
-                TextColumn::make('entity.name')
-                    ->label('Entidad')
-                    ->searchable()
-                    ->toggleable(),
-
                 TextColumn::make('year')
                     ->label('Año')
                     ->sortable()
                     ->badge()
                     ->color('gray'),
+
+                TextColumn::make('title')
+                    ->label('Título')
+                    ->weight(FontWeight::Bold)
+                    ->icon(fn (Document $record): string => static::resolveDocumentTypeIcon($record->file_name))
+                    ->iconColor(fn (Document $record): string => static::resolveDocumentTypeIconColor($record->file_name))
+                    ->searchable()
+                    ->sortable()
+                    ->limit(50)
+                    ->tooltip(
+                        fn (Document $record): string => sprintf(
+                            '%s (%s)',
+                            $record->title,
+                            static::resolveDocumentTypeLabel($record->file_name)
+                        )
+                    ),
+
+                TextColumn::make('category.name')
+                    ->label('Categoría')
+                    ->badge()
+                    ->color(fn (Document $record): string => DocumentCategory::normalizeColor($record->category?->color)),
+
+                TextColumn::make('entity.name')
+                    ->label('Entidad')
+                    ->searchable()
+                    ->toggleable(),
 
                 TextColumn::make('status')
                     ->label('Estado')
@@ -208,12 +232,6 @@ class DocumentResource extends Resource
                     ->trueIcon('heroicon-o-arrow-top-right-on-square')
                     ->falseIcon('heroicon-o-minus-circle')
                     ->toggleable(),
-
-                TextColumn::make('created_at')
-                    ->label('Creado')
-                    ->dateTime('d/m/Y')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
@@ -248,6 +266,9 @@ class DocumentResource extends Resource
                 Action::make('preview')
                     ->label('Vista Previa')
                     ->icon('heroicon-o-eye')
+                    ->iconButton()
+                    ->hiddenLabel()
+                    ->tooltip('Vista previa')
                     ->modalHeading(fn($record): string => $record->title)
                     ->modalContent(fn($record) => view('filament.resources.document-resource.preview', [
                         'url' => $record->gdrive_url,
@@ -255,22 +276,84 @@ class DocumentResource extends Resource
                     ->modalWidth('7xl')
                     ->visible(fn($record): bool => !empty($record->gdrive_url)),
 
-                Action::make('open_drive')
-                    ->label('Abrir en Drive')
-                    ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->url(fn($record): ?string => $record->gdrive_url, shouldOpenInNewTab: true)
-                    ->visible(fn($record): bool => !empty($record->gdrive_url))
-                    ->color('info'),
+                EditAction::make()
+                    ->iconButton()
+                    ->hiddenLabel()
+                    ->tooltip('Editar'),
 
-                EditAction::make(),
-                DeleteAction::make(),
-                ForceDeleteAction::make(),
-                RestoreAction::make(),
+                DeleteAction::make()
+                    ->label('Archivar')
+                    ->icon('heroicon-o-archive-box')
+                    ->color('warning')
+                    ->iconButton()
+                    ->hiddenLabel()
+                    ->tooltip('Archivar')
+                    ->modalHeading('Archivar documento')
+                    ->modalDescription('El documento se ocultará de la lista activa, pero el archivo seguirá disponible en Google Drive.')
+                    ->modalSubmitActionLabel('Archivar')
+                    ->successNotificationTitle('Documento archivado'),
+
+                ForceDeleteAction::make()
+                    ->label('Eliminar definitivamente')
+                    ->iconButton()
+                    ->hiddenLabel()
+                    ->tooltip('Eliminar definitivamente')
+                    ->modalHeading('Eliminar documento definitivamente')
+                    ->modalDescription('Esta acción eliminará el registro y el archivo en Google Drive. No se puede deshacer.')
+                    ->modalSubmitActionLabel('Eliminar definitivamente')
+                    ->action(function (ForceDeleteAction $action, Document $record): void {
+                        try {
+                            static::deleteFromGoogleDrive($record);
+                        } catch (Throwable $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('No se pudo eliminar definitivamente')
+                                ->body('No pudimos eliminar el archivo en Google Drive. Intenta nuevamente.')
+                                ->persistent()
+                                ->send();
+
+                            throw new Halt;
+                        }
+
+                        $result = $action->process(static fn (Document $record): ?bool => $record->forceDelete());
+
+                        if (! $result) {
+                            $action->failure();
+
+                            return;
+                        }
+
+                        $action->success();
+                    }),
+                RestoreAction::make()
+                    ->iconButton()
+                    ->hiddenLabel()
+                    ->tooltip('Restaurar'),
             ])
             ->bulkActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->label('Archivar seleccionados'),
+                    ForceDeleteBulkAction::make()
+                        ->label('Eliminar seleccionados definitivamente')
+                        ->fetchSelectedRecords()
+                        ->action(function (ForceDeleteBulkAction $action, EloquentCollection | Collection | LazyCollection $records): void {
+                            $isFirstException = true;
+
+                            $records->each(static function (Document $record) use ($action, &$isFirstException): void {
+                                try {
+                                    static::deleteFromGoogleDrive($record);
+                                    $record->forceDelete() || $action->reportBulkProcessingFailure();
+                                } catch (Throwable $exception) {
+                                    $action->reportBulkProcessingFailure();
+
+                                    if ($isFirstException) {
+                                        report($exception);
+                                        $isFirstException = false;
+                                    }
+                                }
+                            });
+                        }),
                     RestoreBulkAction::make(),
                 ]),
             ]);
@@ -288,5 +371,62 @@ class DocumentResource extends Resource
             'create' => Pages\CreateDocument::route('/create'),
             'edit' => Pages\EditDocument::route('/{record}/edit'),
         ];
+    }
+
+    public static function deleteFromGoogleDrive(Document $record): void
+    {
+        if (blank($record->gdrive_id)) {
+            return;
+        }
+
+        GoogleDriveHelper::deleteOrTrashFile($record->gdrive_id);
+    }
+
+    protected static function resolveDocumentTypeIcon(?string $fileName): string
+    {
+        return match (static::resolveDocumentType($fileName)) {
+            'pdf' => 'heroicon-o-document',
+            'spreadsheet' => 'heroicon-o-table-cells',
+            'presentation' => 'heroicon-o-presentation-chart-bar',
+            'text' => 'heroicon-o-document-text',
+            default => 'heroicon-o-document',
+        };
+    }
+
+    protected static function resolveDocumentTypeIconColor(?string $fileName): string
+    {
+        return match (static::resolveDocumentType($fileName)) {
+            'pdf' => 'danger',
+            'spreadsheet' => 'success',
+            'presentation' => 'warning',
+            'text' => 'gray',
+            default => 'gray',
+        };
+    }
+
+    protected static function resolveDocumentTypeLabel(?string $fileName): string
+    {
+        return match (static::resolveDocumentType($fileName)) {
+            'pdf' => 'PDF',
+            'spreadsheet' => 'Hoja de cálculo',
+            'presentation' => 'Presentación',
+            'text' => 'Texto',
+            default => 'Documento',
+        };
+    }
+
+    protected static function resolveDocumentType(?string $fileName): string
+    {
+        $extension = Str::of((string) pathinfo((string) $fileName, PATHINFO_EXTENSION))
+            ->lower()
+            ->toString();
+
+        return match ($extension) {
+            'pdf' => 'pdf',
+            'xls', 'xlsx', 'csv', 'tsv', 'ods' => 'spreadsheet',
+            'ppt', 'pptx', 'pps', 'ppsx', 'odp', 'key' => 'presentation',
+            'doc', 'docx', 'odt', 'txt', 'rtf', 'md' => 'text',
+            default => 'other',
+        };
     }
 }
