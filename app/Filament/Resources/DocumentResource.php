@@ -34,6 +34,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
@@ -274,6 +275,34 @@ class DocumentResource extends Resource
                 SelectFilter::make('category')
                     ->label('Categoría')
                     ->relationship('category', 'name'),
+
+                SelectFilter::make('dashboard_bucket')
+                    ->label('Condición dashboard')
+                    ->options([
+                        'pending' => 'Pendientes',
+                        'approved' => 'Aprobados',
+                        'archived' => 'Archivados',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+
+                        return match ($value) {
+                            'pending' => $query->whereIn('status', [
+                                'Borrador',
+                                'Pendiente_OCR',
+                                'Importado_Sin_Clasificar',
+                            ]),
+                            'approved' => $query->where('status', 'Publicado'),
+                            'archived' => $query
+                                ->withTrashed()
+                                ->where(function (Builder $subQuery): void {
+                                    $subQuery
+                                        ->where('status', 'Archivado')
+                                        ->orWhereNotNull('deleted_at');
+                                }),
+                            default => $query,
+                        };
+                    }),
 
                 SelectFilter::make('status')
                     ->label('Estado')

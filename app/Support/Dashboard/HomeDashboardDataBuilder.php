@@ -18,6 +18,7 @@ class HomeDashboardDataBuilder
     /**
      * @return array{
      *     metrics: array{pending: int, approved: int, archived: int},
+     *     metricLinks: array{pending: string, approved: string, archived: string},
      *     topCategories: array<int, array{id: string, name: string, slug: string, count: int, color: string, textColor: string, icon: string, filteredUrl: string}>,
      *     reviewQueue: array<int, array{id: string, title: string, status: string, entityName: ?string, categoryName: ?string, icon: string, createdAtHuman: ?string, openUrl: ?string, editUrl: string}>,
      *     links: array{documentsIndex: string, createDocument: string}
@@ -27,6 +28,7 @@ class HomeDashboardDataBuilder
     {
         return [
             'metrics' => $this->getMetrics(),
+            'metricLinks' => $this->getMetricLinks(),
             'topCategories' => $this->getTopCategories(),
             'reviewQueue' => $this->getReviewQueue(),
             'links' => [
@@ -59,6 +61,18 @@ class HomeDashboardDataBuilder
             'pending' => $pending,
             'approved' => $approved,
             'archived' => $archived + $trashed,
+        ];
+    }
+
+    /**
+     * @return array{pending: string, approved: string, archived: string}
+     */
+    protected function getMetricLinks(): array
+    {
+        return [
+            'pending' => $this->buildDashboardBucketUrl('pending'),
+            'approved' => $this->buildDashboardBucketUrl('approved'),
+            'archived' => $this->buildDashboardBucketUrl('archived', includeTrashed: true),
         ];
     }
 
@@ -130,6 +144,28 @@ class HomeDashboardDataBuilder
                 ],
             ],
         ]);
+
+        return "{$baseUrl}?{$query}";
+    }
+
+    protected function buildDashboardBucketUrl(string $bucket, bool $includeTrashed = false): string
+    {
+        $baseUrl = DocumentResource::getUrl('index');
+        $params = [
+            'filters' => [
+                'dashboard_bucket' => [
+                    'value' => $bucket,
+                ],
+            ],
+        ];
+
+        if ($includeTrashed) {
+            $params['filters']['trashed'] = [
+                'value' => 1,
+            ];
+        }
+
+        $query = http_build_query($params);
 
         return "{$baseUrl}?{$query}";
     }

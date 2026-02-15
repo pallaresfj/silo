@@ -51,6 +51,13 @@ it('builds metrics and top categories for rector users', function () {
     ]);
 
     expect($data['topCategories'])->toHaveCount(4);
+    expect($data['metricLinks']['pending'])
+        ->toContain('filters%5Bdashboard_bucket%5D%5Bvalue%5D=pending');
+    expect($data['metricLinks']['approved'])
+        ->toContain('filters%5Bdashboard_bucket%5D%5Bvalue%5D=approved');
+    expect($data['metricLinks']['archived'])
+        ->toContain('filters%5Bdashboard_bucket%5D%5Bvalue%5D=archived')
+        ->toContain('filters%5Btrashed%5D%5Bvalue%5D=1');
     expect(array_column($data['topCategories'], 'name'))->toBe([
         'Actas de Examen',
         'Certificados',
@@ -172,6 +179,15 @@ it('renders the new dashboard in /admin with queue links', function () {
     $response = $this->get('/admin');
 
     $response->assertStatus(200);
+    $response->assertSee('Buscar documentos...');
+    $response->assertSee('Nuevo documento');
+    $response->assertSee('name="search"', false);
+    $response->assertSee('action="' . DocumentResource::getUrl('index') . '"', false);
+    $response->assertSee(DocumentResource::getUrl('create'), false);
+    $response->assertSee('filters%5Bdashboard_bucket%5D%5Bvalue%5D=pending', false);
+    $response->assertSee('filters%5Bdashboard_bucket%5D%5Bvalue%5D=approved', false);
+    $response->assertSee('filters%5Bdashboard_bucket%5D%5Bvalue%5D=archived', false);
+    $response->assertSee('filters%5Btrashed%5D%5Bvalue%5D=1', false);
     $response->assertSee('Pendientes');
     $response->assertSee('Aprobados');
     $response->assertSee('Archivados');
@@ -206,6 +222,74 @@ it('applies category filter through documents query string alias', function () {
     $response->assertStatus(200);
     $response->assertSee((string) $docA->title);
     $response->assertDontSee((string) $docB->title);
+});
+
+it('applies dashboard bucket filter alias for pending approved and archived', function () {
+    $rector = User::factory()->create(['role' => 'rector']);
+    actingAs($rector);
+    $this->withoutVite();
+
+    $category = createCategory('General', 'general');
+
+    $pendingDoc = createDocument($category, [
+        'title' => 'Documento Pendiente',
+        'status' => 'Borrador',
+    ]);
+
+    $approvedDoc = createDocument($category, [
+        'title' => 'Documento Aprobado',
+        'status' => 'Publicado',
+    ]);
+
+    $archivedDoc = createDocument($category, [
+        'title' => 'Documento Archivado',
+        'status' => 'Archivado',
+    ]);
+
+    $trashedDoc = createDocument($category, [
+        'title' => 'Documento Eliminado',
+        'status' => 'Publicado',
+    ]);
+    $trashedDoc->delete();
+
+    $pendingResponse = $this->get('/admin/documents?filters[dashboard_bucket][value]=pending');
+    $pendingResponse->assertStatus(200);
+    $pendingResponse->assertSee((string) $pendingDoc->title);
+    $pendingResponse->assertDontSee((string) $approvedDoc->title);
+
+    $approvedResponse = $this->get('/admin/documents?filters[dashboard_bucket][value]=approved');
+    $approvedResponse->assertStatus(200);
+    $approvedResponse->assertSee((string) $approvedDoc->title);
+    $approvedResponse->assertDontSee((string) $pendingDoc->title);
+
+    $archivedResponse = $this->get('/admin/documents?filters[dashboard_bucket][value]=archived&filters[trashed][value]=1');
+    $archivedResponse->assertStatus(200);
+    $archivedResponse->assertSee((string) $archivedDoc->title);
+    $archivedResponse->assertSee((string) $trashedDoc->title);
+});
+
+it('applies documents search query string alias', function () {
+    $rector = User::factory()->create(['role' => 'rector']);
+    actingAs($rector);
+    $this->withoutVite();
+
+    $category = createCategory('General', 'general');
+
+    $docMatch = createDocument($category, [
+        'title' => 'Resolucion Academica Especial',
+        'status' => 'Publicado',
+    ]);
+
+    $docOther = createDocument($category, [
+        'title' => 'Circular Interna de Secretaría',
+        'status' => 'Publicado',
+    ]);
+
+    $response = $this->get('/admin/documents?search=Resolucion%20Academica%20Especial');
+
+    $response->assertStatus(200);
+    $response->assertSee((string) $docMatch->title);
+    $response->assertDontSee((string) $docOther->title);
 });
 
 function createCategory(string $name, string $slug): DocumentCategory

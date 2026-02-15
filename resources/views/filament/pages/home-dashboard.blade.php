@@ -1,7 +1,51 @@
 <x-filament-panels::page>
     <div class="silo-dashboard">
+        <section class="silo-dashboard-top">
+            <form
+                action="{{ $links['documentsIndex'] }}"
+                method="GET"
+                class="silo-dashboard-search-form"
+                onsubmit="const input = this.elements.namedItem('search'); if (input && !input.value.trim()) { input.disabled = true; }"
+            >
+                <label for="silo-dashboard-search" class="sr-only">Buscar documentos</label>
+                <input
+                    id="silo-dashboard-search"
+                    type="search"
+                    name="search"
+                    class="silo-dashboard-search-input"
+                    placeholder="Buscar documentos..."
+                    aria-label="Buscar documentos"
+                />
+
+                <button
+                    type="submit"
+                    class="silo-dashboard-search-btn"
+                >
+                    <x-filament::icon
+                        icon="heroicon-o-magnifying-glass"
+                        class="silo-dashboard-search-btn__icon"
+                    />
+                    Buscar
+                </button>
+            </form>
+
+            <a
+                href="{{ $links['createDocument'] }}"
+                class="silo-dashboard-create-btn"
+            >
+                <x-filament::icon
+                    icon="heroicon-o-plus"
+                    class="silo-dashboard-create-btn__icon"
+                />
+                Nuevo documento
+            </a>
+        </section>
+
         <section class="silo-dashboard-kpis">
-            <article class="silo-dashboard-kpi silo-dashboard-kpi--pending">
+            <a
+                href="{{ $metricLinks['pending'] }}"
+                class="silo-dashboard-kpi silo-dashboard-kpi--pending"
+            >
                 <div class="silo-dashboard-kpi__body">
                     <p class="silo-dashboard-kpi__label">Pendientes</p>
                     <p class="silo-dashboard-kpi__value">{{ number_format($metrics['pending']) }}</p>
@@ -13,9 +57,12 @@
                         class="silo-dashboard-kpi__icon"
                     />
                 </div>
-            </article>
+            </a>
 
-            <article class="silo-dashboard-kpi silo-dashboard-kpi--approved">
+            <a
+                href="{{ $metricLinks['approved'] }}"
+                class="silo-dashboard-kpi silo-dashboard-kpi--approved"
+            >
                 <div class="silo-dashboard-kpi__body">
                     <p class="silo-dashboard-kpi__label">Aprobados</p>
                     <p class="silo-dashboard-kpi__value">{{ number_format($metrics['approved']) }}</p>
@@ -27,9 +74,12 @@
                         class="silo-dashboard-kpi__icon"
                     />
                 </div>
-            </article>
+            </a>
 
-            <article class="silo-dashboard-kpi silo-dashboard-kpi--archived">
+            <a
+                href="{{ $metricLinks['archived'] }}"
+                class="silo-dashboard-kpi silo-dashboard-kpi--archived"
+            >
                 <div class="silo-dashboard-kpi__body">
                     <p class="silo-dashboard-kpi__label">Archivados</p>
                     <p class="silo-dashboard-kpi__value">{{ number_format($metrics['archived']) }}</p>
@@ -41,7 +91,7 @@
                         class="silo-dashboard-kpi__icon"
                     />
                 </div>
-            </article>
+            </a>
         </section>
 
         <section class="silo-dashboard-section">
