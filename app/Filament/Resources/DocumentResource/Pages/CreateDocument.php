@@ -18,10 +18,71 @@ class CreateDocument extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $creationMode = $data['creation_mode'] ?? 'upload';
+        $driveNativeType = $data['drive_native_type'] ?? 'document';
         $attachment = $data['attachment'] ?? null;
 
-        // Remove attachment from data - it's not a DB column
+        // Remove non-persistent fields from data.
+        unset($data['creation_mode'], $data['drive_native_type']);
         unset($data['attachment']);
+
+        $year = $data['year'] ?? now()->year;
+        $categorySlug = $this->getCategorySlug($data['category_id'] ?? null);
+        $entityFolder = $this->getEntityFolder($data['entity_id'] ?? null);
+
+        if ($creationMode === 'drive_native') {
+            try {
+                $result = $this->createNativeDocumentInGoogleDrive(
+                    $data['title'] ?? 'Documento sin titulo',
+                    $driveNativeType,
+                    $year,
+                    $categorySlug,
+                    $entityFolder
+                );
+
+                if ($result) {
+                    $data['gdrive_id'] = $result['id'];
+                    $data['gdrive_url'] = $result['webViewLink'];
+                    $data['file_name'] = $result['fileName'];
+                }
+
+                Log::info('Native document created in Google Drive', [
+                    'title' => $data['title'] ?? 'N/A',
+                    'native_type' => $driveNativeType,
+                    'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
+                    'folder' => blank($entityFolder)
+                        ? "SGI-Doc/{$year}/{$categorySlug}"
+                        : "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Failed to create native document in Google Drive', [
+                    'error' => $e->getMessage(),
+                    'native_type' => $driveNativeType,
+                    'trace' => $e->getTraceAsString(),
+                ]);
+
+                $this->form->fill([]);
+
+                Notification::make()
+                    ->danger()
+                    ->title('No se pudo crear el documento')
+                    ->body('No pudimos crear el documento en Google Drive. Intenta nuevamente.')
+                    ->persistent()
+                    ->send();
+
+                throw new Halt;
+            } finally {
+                if ($attachment) {
+                    $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
+
+                    if ($localPath && Storage::disk('local')->exists($localPath)) {
+                        Storage::disk('local')->delete($localPath);
+                    }
+                }
+            }
+
+            return $data;
+        }
 
         if ($attachment) {
             $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
@@ -29,11 +90,6 @@ class CreateDocument extends CreateRecord
             if ($localPath && Storage::disk('local')->exists($localPath)) {
                 $originalName = basename($localPath);
                 $data['file_name'] = $originalName;
-
-                // Build the Drive folder path: SGI-Doc/{Year}/{CategorySlug}
-                $year = $data['year'] ?? now()->year;
-                $categorySlug = $this->getCategorySlug($data['category_id'] ?? null);
-                $entityFolder = $this->getEntityFolder($data['entity_id'] ?? null);
 
                 try {
                     // Get file contents from local storage
@@ -58,7 +114,9 @@ class CreateDocument extends CreateRecord
                     Log::info('Document uploaded to Google Drive', [
                         'file_name' => $originalName,
                         'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
-                        'folder' => "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
+                        'folder' => blank($entityFolder)
+                            ? "SGI-Doc/{$year}/{$categorySlug}"
+                            : "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
                     ]);
                 } catch (\Throwable $e) {
                     Log::error('Failed to upload document to Google Drive', [

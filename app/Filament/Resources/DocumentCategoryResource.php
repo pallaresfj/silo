@@ -8,7 +8,7 @@ use App\Support\GoogleDriveHelper;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\Select;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -16,6 +16,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Exceptions\Halt;
+use Filament\Tables\Columns\ColorColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -75,10 +76,11 @@ class DocumentCategoryResource extends Resource
                             ->helperText('Se usa para la estructura de carpetas en Google Drive.')
                             ->unique(ignoreRecord: true),
 
-                        Select::make('color')
+                        ColorPicker::make('color')
                             ->label('Color del badge')
-                            ->options(DocumentCategory::colorOptions())
+                            ->hex()
                             ->default(DocumentCategory::DEFAULT_COLOR)
+                            ->helperText('Selecciona cualquier color para identificar esta categoría.')
                             ->required(),
 
                         Toggle::make('is_system')
@@ -101,13 +103,9 @@ class DocumentCategoryResource extends Resource
                     ->label('Slug')
                     ->searchable(),
 
-                TextColumn::make('color')
+                ColorColumn::make('color')
                     ->label('Color')
-                    ->badge()
-                    ->formatStateUsing(
-                        fn (?string $state): string => DocumentCategory::colorOptions()[DocumentCategory::normalizeColor($state)]
-                    )
-                    ->color(fn (?string $state): string => DocumentCategory::normalizeColor($state)),
+                    ->state(fn (DocumentCategory $record): string => DocumentCategory::normalizeColor($record->color)),
 
                 IconColumn::make('is_system')
                     ->label('Sistema')

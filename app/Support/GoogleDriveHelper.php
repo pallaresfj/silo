@@ -228,9 +228,12 @@ class GoogleDriveHelper
 
         $yearFolderId = static::findOrCreateFolder($service, (string) $year, $rootId);
         $categoryFolderId = static::findOrCreateFolder($service, static::normalizeCategorySlug($categorySlug), $yearFolderId);
-        $entityFolderId = static::findOrCreateFolder($service, static::normalizeEntityFolderName($entityName), $categoryFolderId);
 
-        return $entityFolderId;
+        if (blank($entityName)) {
+            return $categoryFolderId;
+        }
+
+        return static::findOrCreateFolder($service, static::normalizeEntityFolderName($entityName), $categoryFolderId);
     }
 
     /**

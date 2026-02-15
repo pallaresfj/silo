@@ -58,10 +58,72 @@ class EditDocument extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $creationMode = $data['creation_mode'] ?? 'upload';
+        $driveNativeType = $data['drive_native_type'] ?? 'document';
         $attachment = $data['attachment'] ?? null;
 
-        // Remove attachment from data - it's not a DB column
+        // Remove non-persistent fields from data.
+        unset($data['creation_mode'], $data['drive_native_type']);
         unset($data['attachment']);
+
+        $year = $data['year'] ?? $this->record->year ?? now()->year;
+        $categorySlug = $this->getCategorySlug($data['category_id'] ?? $this->record->category_id ?? null);
+        $entityFolder = $this->getEntityFolder($data['entity_id'] ?? $this->record->entity_id ?? null);
+
+        if ($creationMode === 'drive_native') {
+            try {
+                $result = $this->createNativeDocumentInGoogleDrive(
+                    $data['title'] ?? $this->record->title ?? 'Documento sin titulo',
+                    $driveNativeType,
+                    $year,
+                    $categorySlug,
+                    $entityFolder
+                );
+
+                if ($result) {
+                    $data['gdrive_id'] = $result['id'];
+                    $data['gdrive_url'] = $result['webViewLink'];
+                    $data['file_name'] = $result['fileName'];
+                }
+
+                Log::info('Native document created in Google Drive from edit', [
+                    'document_id' => $this->record->id,
+                    'title' => $data['title'] ?? $this->record->title ?? 'N/A',
+                    'native_type' => $driveNativeType,
+                    'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
+                    'folder' => blank($entityFolder)
+                        ? "SGI-Doc/{$year}/{$categorySlug}"
+                        : "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Failed to create native document in Google Drive from edit', [
+                    'document_id' => $this->record->id,
+                    'error' => $e->getMessage(),
+                    'native_type' => $driveNativeType,
+                ]);
+
+                $this->form->fill($this->record->attributesToArray());
+
+                Notification::make()
+                    ->danger()
+                    ->title('No se pudo actualizar el documento')
+                    ->body('No pudimos crear el documento en Google Drive. Intenta nuevamente.')
+                    ->persistent()
+                    ->send();
+
+                throw new Halt;
+            } finally {
+                if ($attachment) {
+                    $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
+
+                    if ($localPath && Storage::disk('local')->exists($localPath)) {
+                        Storage::disk('local')->delete($localPath);
+                    }
+                }
+            }
+
+            return $data;
+        }
 
         if ($attachment) {
             $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
@@ -69,11 +131,6 @@ class EditDocument extends EditRecord
             if ($localPath && Storage::disk('local')->exists($localPath)) {
                 $originalName = basename($localPath);
                 $data['file_name'] = $originalName;
-
-                // Build the Drive folder path: SGI-Doc/{Year}/{CategorySlug}
-                $year = $data['year'] ?? $this->record->year ?? now()->year;
-                $categorySlug = $this->getCategorySlug($data['category_id'] ?? $this->record->category_id ?? null);
-                $entityFolder = $this->getEntityFolder($data['entity_id'] ?? $this->record->entity_id ?? null);
 
                 try {
                     // Get file contents from local storage
@@ -98,7 +155,9 @@ class EditDocument extends EditRecord
                     Log::info('Document updated on Google Drive', [
                         'file_name' => $originalName,
                         'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
-                        'folder' => "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
+                        'folder' => blank($entityFolder)
+                            ? "SGI-Doc/{$year}/{$categorySlug}"
+                            : "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
                     ]);
                 } catch (\Throwable $e) {
                     Log::error('Failed to upload document to Google Drive', [

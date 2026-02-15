@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->string('name');
             $table->string('slug')->unique();
-            $table->string('color')->default('primary');
+            $table->string('color')->default('#3B82F6');
             $table->boolean('is_system')->default(false);
             $table->timestamps();
         });

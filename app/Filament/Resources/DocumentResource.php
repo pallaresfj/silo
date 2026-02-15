@@ -17,13 +17,17 @@ use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Notifications\Notification;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Colors\Color;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Exceptions\Halt;
 use Filament\Tables\Columns\IconColumn;
@@ -75,6 +79,29 @@ class DocumentResource extends Resource
                 Section::make('Archivo')
                     ->icon('heroicon-o-paper-clip')
                     ->schema([
+                        Radio::make('creation_mode')
+                            ->label('Como crear el archivo')
+                            ->options([
+                                'upload' => 'Subir archivo',
+                                'drive_native' => 'Crear documento en Drive',
+                            ])
+                            ->default('upload')
+                            ->live()
+                            ->columnSpanFull(),
+
+                        Select::make('drive_native_type')
+                            ->label('Tipo de documento en Drive')
+                            ->options([
+                                'document' => 'Google Docs (texto)',
+                                'spreadsheet' => 'Google Sheets (hoja de calculo)',
+                                'presentation' => 'Google Slides (presentacion)',
+                            ])
+                            ->default('document')
+                            ->required(fn (Get $get): bool => ($get('creation_mode') ?? 'upload') === 'drive_native')
+                            ->visible(fn (Get $get): bool => ($get('creation_mode') ?? 'upload') === 'drive_native')
+                            ->helperText('Se creara un archivo nativo en la carpeta de Drive del documento.')
+                            ->columnSpanFull(),
+
                         FileUpload::make('attachment')
                             ->label('Archivo')
                             ->disk('local') // temp upload to local; we move to Drive on save
@@ -90,6 +117,8 @@ class DocumentResource extends Resource
                                 'image/jpeg',
                                 'image/png',
                             ])
+                            ->visible(fn (Get $get): bool => ($get('creation_mode') ?? 'upload') === 'upload')
+                            ->helperText('Opcional. Si no adjuntas archivo, se creara solo el registro.')
                             ->columnSpanFull(),
                     ])
                     ->collapsible()
@@ -121,9 +150,9 @@ class DocumentResource extends Resource
                                     ->label('Slug')
                                     ->maxLength(100)
                                     ->helperText('Se genera automáticamente si se deja vacío'),
-                                Select::make('color')
+                                ColorPicker::make('color')
                                     ->label('Color del badge')
-                                    ->options(DocumentCategory::colorOptions())
+                                    ->hex()
                                     ->default(DocumentCategory::DEFAULT_COLOR)
                                     ->required(),
                             ]),
@@ -205,7 +234,9 @@ class DocumentResource extends Resource
                 TextColumn::make('category.name')
                     ->label('Categoría')
                     ->badge()
-                    ->color(fn (Document $record): string => DocumentCategory::normalizeColor($record->category?->color)),
+                    ->color(fn (Document $record): array => Color::hex(
+                        DocumentCategory::normalizeColor($record->category?->color)
+                    )),
 
                 TextColumn::make('entity.name')
                     ->label('Entidad')
@@ -423,9 +454,9 @@ class DocumentResource extends Resource
 
         return match ($extension) {
             'pdf' => 'pdf',
-            'xls', 'xlsx', 'csv', 'tsv', 'ods' => 'spreadsheet',
-            'ppt', 'pptx', 'pps', 'ppsx', 'odp', 'key' => 'presentation',
-            'doc', 'docx', 'odt', 'txt', 'rtf', 'md' => 'text',
+            'xls', 'xlsx', 'csv', 'tsv', 'ods', 'gsheet' => 'spreadsheet',
+            'ppt', 'pptx', 'pps', 'ppsx', 'odp', 'key', 'gslides' => 'presentation',
+            'doc', 'docx', 'odt', 'txt', 'rtf', 'md', 'gdoc' => 'text',
             default => 'other',
         };
     }

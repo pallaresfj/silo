@@ -60,12 +60,17 @@ class Document extends Model
 
     /**
      * Build the Drive folder path for this document.
-     * Pattern: SGI-Doc/{Year}/{CategorySlug}/{EntitySlug}
+     * Pattern: SGI-Doc/{Year}/{CategorySlug}[/{EntitySlug}]
      */
     public function getDriveFolderAttribute(): string
     {
         $category = GoogleDriveHelper::normalizeCategorySlug($this->category?->slug);
-        $entity = GoogleDriveHelper::normalizeEntityFolderName($this->entity?->name);
+
+        if (blank($this->entity?->name)) {
+            return "SGI-Doc/{$this->year}/{$category}";
+        }
+
+        $entity = GoogleDriveHelper::normalizeEntityFolderName($this->entity->name);
 
         return "SGI-Doc/{$this->year}/{$category}/{$entity}";
     }

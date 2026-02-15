@@ -12,7 +12,7 @@ class MigrateDriveEntityFolders extends Command
         {--execute : Ejecuta la migración (por defecto es simulación)}
         {--limit=0 : Límite de documentos a procesar (0 = sin límite)}';
 
-    protected $description = 'Migra documentos existentes en Drive a la estructura /Año/Categoría/Entidad/archivo';
+    protected $description = 'Migra documentos existentes en Drive a la estructura /Año/Categoría[/Entidad]/archivo';
 
     public function handle(): int
     {
@@ -113,4 +113,3 @@ class MigrateDriveEntityFolders extends Command
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
 }
-
