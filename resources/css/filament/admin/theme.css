@@ -1,0 +1,432 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+:root {
+    --silo-surface: #ffffff;
+    --silo-surface-muted: #f2f4f7;
+    --silo-text: #111827;
+    --silo-text-muted: #6b7280;
+    --silo-border: #dbe2ea;
+    --silo-shadow: 0 10px 30px rgba(17, 24, 39, 0.06);
+    --silo-radius-lg: 18px;
+    --silo-radius-md: 14px;
+    --silo-kpi-pending: #f59e0b;
+    --silo-kpi-approved: #10b981;
+    --silo-kpi-archived: #1e3a8a;
+    --silo-brand: #1d6362;
+}
+
+.fi-page:has(.silo-dashboard) .fi-page-content {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.silo-dashboard {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.silo-dashboard-kpis {
+    display: grid;
+    gap: 1rem;
+}
+
+.silo-dashboard-kpi {
+    align-items: center;
+    background: var(--silo-surface);
+    border: 1px solid var(--silo-border);
+    border-left-width: 6px;
+    border-radius: var(--silo-radius-lg);
+    box-shadow: var(--silo-shadow);
+    display: flex;
+    justify-content: space-between;
+    min-height: 7.5rem;
+    padding: 1.25rem 1.4rem;
+}
+
+.silo-dashboard-kpi--pending {
+    border-left-color: var(--silo-kpi-pending);
+}
+
+.silo-dashboard-kpi--approved {
+    border-left-color: var(--silo-kpi-approved);
+}
+
+.silo-dashboard-kpi--archived {
+    border-left-color: var(--silo-kpi-archived);
+}
+
+.silo-dashboard-kpi__label {
+    color: #4b5563;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.silo-dashboard-kpi__value {
+    color: #0f172a;
+    font-size: 2.3rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0.45rem 0 0;
+}
+
+.silo-dashboard-kpi__icon-wrap {
+    align-items: center;
+    background: #eef2f7;
+    border-radius: var(--silo-radius-md);
+    display: inline-flex;
+    height: 3.9rem;
+    justify-content: center;
+    width: 3.9rem;
+}
+
+.silo-dashboard-kpi--pending .silo-dashboard-kpi__icon-wrap {
+    background: #fff4dd;
+    color: #d97706;
+}
+
+.silo-dashboard-kpi--approved .silo-dashboard-kpi__icon-wrap {
+    background: #dff8ef;
+    color: #059669;
+}
+
+.silo-dashboard-kpi--archived .silo-dashboard-kpi__icon-wrap {
+    background: #e6e9f6;
+    color: #1e3a8a;
+}
+
+.silo-dashboard-kpi__icon {
+    height: 1.65rem;
+    width: 1.65rem;
+}
+
+.silo-dashboard-section {
+    display: grid;
+    gap: 1rem;
+}
+
+.silo-dashboard-section__header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+}
+
+.silo-dashboard-section__title {
+    color: var(--silo-text);
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.silo-dashboard-link {
+    color: var(--silo-brand);
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.silo-dashboard-link:hover {
+    text-decoration: underline;
+}
+
+.silo-dashboard-category-grid {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: 1fr;
+}
+
+.silo-dashboard-category-card {
+    align-items: center;
+    background: var(--silo-surface);
+    border: 1px solid var(--silo-border);
+    border-radius: var(--silo-radius-lg);
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: auto 1fr;
+    padding: 1rem;
+    text-decoration: none;
+}
+
+.silo-dashboard-category-card:hover {
+    border-color: #c7d2e2;
+    box-shadow: var(--silo-shadow);
+}
+
+.silo-dashboard-category-card__icon {
+    align-items: center;
+    background: color-mix(in srgb, var(--silo-category-color), #fff 88%);
+    border-radius: 999px;
+    color: var(--silo-category-color);
+    display: inline-flex;
+    height: 3rem;
+    justify-content: center;
+    width: 3rem;
+}
+
+.silo-dashboard-category-card__icon-svg {
+    height: 1.3rem;
+    width: 1.3rem;
+}
+
+.silo-dashboard-category-card__name {
+    color: var(--silo-text);
+    font-size: 1.04rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.silo-dashboard-category-card__count {
+    color: var(--silo-text-muted);
+    font-size: 0.9rem;
+    margin: 0.2rem 0 0;
+}
+
+.silo-dashboard-review-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.silo-dashboard-review-item {
+    align-items: center;
+    background: var(--silo-surface);
+    border: 1px solid var(--silo-border);
+    border-radius: var(--silo-radius-lg);
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: auto 1fr;
+    padding: 1rem;
+}
+
+.silo-dashboard-review-item__actions {
+    display: grid;
+    gap: 0.5rem;
+    grid-column: 1 / -1;
+}
+
+.silo-dashboard-review-item__icon {
+    align-items: center;
+    background: #eef2f7;
+    border-radius: 12px;
+    color: #334155;
+    display: inline-flex;
+    height: 2.8rem;
+    justify-content: center;
+    width: 2.8rem;
+}
+
+.silo-dashboard-review-item__icon-svg {
+    height: 1.2rem;
+    width: 1.2rem;
+}
+
+.silo-dashboard-review-item__content {
+    min-width: 0;
+}
+
+.silo-dashboard-review-item__title {
+    color: var(--silo-text);
+    font-size: 1.1rem;
+    font-weight: 800;
+    line-height: 1.3;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.silo-dashboard-review-item__meta {
+    color: var(--silo-text-muted);
+    font-size: 0.92rem;
+    margin: 0.25rem 0 0;
+}
+
+.silo-dashboard-open-btn {
+    align-items: center;
+    background: #1f2937;
+    border-radius: 0.75rem;
+    color: #fff;
+    display: inline-flex;
+    font-size: 0.95rem;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 2.7rem;
+    padding: 0.65rem 1rem;
+    text-decoration: none;
+}
+
+.silo-dashboard-open-btn:hover {
+    background: #111827;
+}
+
+.silo-dashboard-open-btn--disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.silo-dashboard-edit-btn {
+    align-items: center;
+    background: #e5e7eb;
+    border-radius: 0.75rem;
+    color: #111827;
+    display: inline-flex;
+    font-size: 0.95rem;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 2.7rem;
+    padding: 0.65rem 1rem;
+    text-decoration: none;
+}
+
+.silo-dashboard-edit-btn:hover {
+    background: #d1d5db;
+}
+
+.silo-dashboard-empty {
+    background: var(--silo-surface-muted);
+    border: 1px dashed #c2ccd9;
+    border-radius: var(--silo-radius-lg);
+    padding: 1rem 1.1rem;
+}
+
+.silo-dashboard-empty__title {
+    color: var(--silo-text);
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.silo-dashboard-empty__text {
+    color: var(--silo-text-muted);
+    font-size: 0.9rem;
+    margin: 0.3rem 0 0;
+}
+
+.dark .silo-dashboard-kpi {
+    background: #0f172a;
+    border-color: #1f2937;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.45);
+}
+
+.dark .silo-dashboard-kpi__label {
+    color: #cbd5e1;
+}
+
+.dark .silo-dashboard-kpi__value {
+    color: #f8fafc;
+}
+
+.dark .silo-dashboard-kpi__icon-wrap {
+    background: #1e293b;
+}
+
+.dark .silo-dashboard-section__title {
+    color: #f8fafc;
+}
+
+.dark .silo-dashboard-link {
+    color: #67e8f9;
+}
+
+.dark .silo-dashboard-category-card {
+    background: #0f172a;
+    border-color: #1f2937;
+}
+
+.dark .silo-dashboard-category-card:hover {
+    border-color: #334155;
+}
+
+.dark .silo-dashboard-category-card__name {
+    color: #f8fafc;
+}
+
+.dark .silo-dashboard-category-card__count {
+    color: #94a3b8;
+}
+
+.dark .silo-dashboard-review-item {
+    background: #0f172a;
+    border-color: #1f2937;
+}
+
+.dark .silo-dashboard-review-item__icon {
+    background: #1e293b;
+    color: #cbd5e1;
+}
+
+.dark .silo-dashboard-review-item__title {
+    color: #f8fafc;
+}
+
+.dark .silo-dashboard-review-item__meta {
+    color: #94a3b8;
+}
+
+.dark .silo-dashboard-open-btn {
+    background: #2563eb;
+}
+
+.dark .silo-dashboard-open-btn:hover {
+    background: #1d4ed8;
+}
+
+.dark .silo-dashboard-open-btn--disabled {
+    background: #334155;
+    color: #94a3b8;
+}
+
+.dark .silo-dashboard-edit-btn {
+    background: #1e293b;
+    color: #e2e8f0;
+}
+
+.dark .silo-dashboard-edit-btn:hover {
+    background: #334155;
+}
+
+.dark .silo-dashboard-empty {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+.dark .silo-dashboard-empty__title {
+    color: #f8fafc;
+}
+
+.dark .silo-dashboard-empty__text {
+    color: #94a3b8;
+}
+
+@media (min-width: 768px) {
+    .silo-dashboard-kpis {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .silo-dashboard-category-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .silo-dashboard-review-item {
+        grid-template-columns: auto 1fr auto;
+    }
+
+    .silo-dashboard-review-item__actions {
+        grid-column: auto;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-width: 13rem;
+    }
+
+    .silo-dashboard-open-btn,
+    .silo-dashboard-edit-btn {
+        min-width: 6.25rem;
+    }
+}
+
+@media (min-width: 1200px) {
+    .silo-dashboard-category-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
