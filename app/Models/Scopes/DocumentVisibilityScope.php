@@ -12,7 +12,7 @@ class DocumentVisibilityScope implements Scope
     /**
      * Apply the scope to a given Eloquent query builder.
      *
-     * - Rector role: sees ALL documents (no filter applied).
+     * - Rector/Admin roles: see ALL documents (no filter applied).
      * - Other roles: only see documents with status 'Publicado'.
      * - Guest (unauthenticated): only 'Publicado'.
      */
@@ -20,8 +20,7 @@ class DocumentVisibilityScope implements Scope
     {
         $user = Auth::user();
 
-        // Rector sees everything
-        if ($user && $user->role === 'rector') {
+        if ($user && method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['rector', 'administrador'])) {
             return;
         }
 

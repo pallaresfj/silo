@@ -6,10 +6,13 @@ namespace App\Models;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable implements FilamentUser, HasAvatar
 {
@@ -24,9 +27,12 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     protected $fillable = [
         'name',
         'email',
+        'google_subject',
         'password',
         'avatar_url',
+        'google_avatar_url',
         'role',
+        'last_google_login_at',
     ];
 
     /**
@@ -49,6 +55,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'last_google_login_at' => 'datetime',
         ];
     }
 
@@ -57,7 +64,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
      */
     public function canAccessPanel(Panel $panel): bool
     {
-        return true;
+        if ($this->hasRbacRoleTables() && $this->roles()->exists()) {
+            return true;
+        }
+
+        return filled($this->role);
     }
 
     /**
@@ -65,8 +76,127 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
      */
     public function getFilamentAvatarUrl(): ?string
     {
-        return $this->avatar_url
-            ? Storage::url($this->avatar_url)
-            : null;
+        if (filled($this->avatar_url)) {
+            return Storage::url((string) $this->avatar_url);
+        }
+
+        return $this->google_avatar_url;
+    }
+
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+
+    public function hasRole(string $slug): bool
+    {
+        return $this->hasAnyRole([$slug]);
+    }
+
+    /**
+     * @param  array<int, string>  $slugs
+     */
+    public function hasAnyRole(array $slugs): bool
+    {
+        $slugs = array_map(fn (string $slug): string => Str::lower($slug), $slugs);
+
+        if ($this->hasRbacRoleTables() && $this->relationLoaded('roles') && $this->roles->isNotEmpty()) {
+            return $this->roles
+                ->pluck('slug')
+                ->map(fn (string $slug): string => Str::lower($slug))
+                ->intersect($slugs)
+                ->isNotEmpty();
+        }
+
+        if ($this->hasRbacRoleTables() && $this->roles()->exists()) {
+            return $this->roles()
+                ->whereIn('slug', $slugs)
+                ->exists();
+        }
+
+        if (blank($this->role)) {
+            return false;
+        }
+
+        return in_array(Str::lower((string) $this->role), $slugs, true);
+    }
+
+    public function hasPermission(string $code): bool
+    {
+        $code = Str::lower($code);
+
+        if (
+            $this->hasRbacPermissionTables() &&
+            $this->roles()->whereHas('permissions', fn ($query) => $query->where('code', $code))->exists()
+        ) {
+            return true;
+        }
+
+        $legacyRole = Str::lower((string) $this->role);
+        $legacyPermissions = static::legacyRolePermissions()[$legacyRole] ?? [];
+
+        return in_array($code, $legacyPermissions, true);
+    }
+
+    protected function hasRbacRoleTables(): bool
+    {
+        return Schema::hasTable('roles') && Schema::hasTable('role_user');
+    }
+
+    protected function hasRbacPermissionTables(): bool
+    {
+        return $this->hasRbacRoleTables()
+            && Schema::hasTable('permissions')
+            && Schema::hasTable('permission_role');
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function legacyRolePermissions(): array
+    {
+        return [
+            'rector' => [
+                'documents.view',
+                'documents.view_all_states',
+                'documents.create',
+                'documents.update',
+                'documents.delete',
+                'categories.view',
+                'categories.manage',
+                'entities.view',
+                'entities.manage',
+                'users.manage',
+                'roles.manage',
+                'whitelist.manage',
+            ],
+            'administrador' => [
+                'documents.view',
+                'documents.view_all_states',
+                'documents.create',
+                'documents.update',
+                'documents.delete',
+                'categories.view',
+                'categories.manage',
+                'entities.view',
+                'entities.manage',
+                'users.manage',
+                'roles.manage',
+                'whitelist.manage',
+            ],
+            'editor' => [
+                'documents.view',
+                'documents.create',
+                'documents.update',
+                'categories.view',
+                'entities.view',
+            ],
+            'docente' => [
+                'documents.view',
+            ],
+            'lector' => [
+                'documents.view',
+            ],
+        ];
     }
 }

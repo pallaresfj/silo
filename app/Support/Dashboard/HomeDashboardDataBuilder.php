@@ -5,6 +5,8 @@ namespace App\Support\Dashboard;
 use App\Filament\Resources\DocumentResource;
 use App\Models\Document;
 use App\Models\DocumentCategory;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class HomeDashboardDataBuilder
@@ -21,7 +23,8 @@ class HomeDashboardDataBuilder
      *     metricLinks: array{pending: string, approved: string, archived: string},
      *     topCategories: array<int, array{id: string, name: string, slug: string, count: int, color: string, textColor: string, icon: string, filteredUrl: string}>,
      *     reviewQueue: array<int, array{id: string, title: string, status: string, entityName: ?string, categoryName: ?string, icon: string, createdAtHuman: ?string, openUrl: ?string, editUrl: string}>,
-     *     links: array{documentsIndex: string, createDocument: string}
+     *     links: array{documentsIndex: string, createDocument: string},
+     *     canCreateDocument: bool
      * }
      */
     public function build(): array
@@ -35,6 +38,7 @@ class HomeDashboardDataBuilder
                 'documentsIndex' => DocumentResource::getUrl('index'),
                 'createDocument' => DocumentResource::getUrl('create'),
             ],
+            'canCreateDocument' => $this->canCreateDocument(),
         ];
     }
 
@@ -215,5 +219,16 @@ class HomeDashboardDataBuilder
             str_contains($term, 'expediente') => 'heroicon-o-briefcase',
             default => 'heroicon-o-folder',
         };
+    }
+
+    protected function canCreateDocument(): bool
+    {
+        $user = Auth::user();
+
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        return $user->hasPermission('documents.create');
     }
 }

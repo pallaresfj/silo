@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use BackedEnum;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\FileUpload;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -48,16 +49,13 @@ class EditProfile extends BaseEditProfile
                 $this->getNameFormComponent()
                     ->label('Nombre Completo'),
                 $this->getEmailFormComponent()
-                    ->label('Correo Electrónico'),
-
-                Section::make('Cambiar Contraseña')
-                    ->description('Deja los campos en blanco si no deseas cambiar tu contraseña.')
-                    ->schema([
-                        $this->getPasswordFormComponent()
-                            ->label('Nueva Contraseña'),
-                        $this->getPasswordConfirmationFormComponent()
-                            ->label('Confirmar Contraseña'),
-                    ]),
+                    ->label('Correo Electrónico')
+                    ->disabled(),
             ]);
+    }
+
+    protected function getRedirectUrl(): ?string
+    {
+        return Filament::getCurrentOrDefaultPanel()->getUrl();
     }
 }

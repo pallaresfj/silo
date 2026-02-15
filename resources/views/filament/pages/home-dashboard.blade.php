@@ -29,16 +29,18 @@
                 </button>
             </form>
 
-            <a
-                href="{{ $links['createDocument'] }}"
-                class="silo-dashboard-create-btn"
-            >
-                <x-filament::icon
-                    icon="heroicon-o-plus"
-                    class="silo-dashboard-create-btn__icon"
-                />
-                Nuevo documento
-            </a>
+            @if ($canCreateDocument)
+                <a
+                    href="{{ $links['createDocument'] }}"
+                    class="silo-dashboard-create-btn"
+                >
+                    <x-filament::icon
+                        icon="heroicon-o-plus"
+                        class="silo-dashboard-create-btn__icon"
+                    />
+                    Nuevo documento
+                </a>
+            @endif
         </section>
 
         <section class="silo-dashboard-kpis">
@@ -97,12 +99,14 @@
         <section class="silo-dashboard-section">
             <div class="silo-dashboard-section__header">
                 <h2 class="silo-dashboard-section__title">Categorías Principales</h2>
-                <a
-                    href="{{ $links['createDocument'] }}"
-                    class="silo-dashboard-link"
-                >
-                    Nuevo
-                </a>
+                @if ($canCreateDocument)
+                    <a
+                        href="{{ $links['createDocument'] }}"
+                        class="silo-dashboard-link"
+                    >
+                        Nuevo
+                    </a>
+                @endif
             </div>
 
             @if (count($topCategories) === 0)

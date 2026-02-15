@@ -199,6 +199,24 @@ it('renders the new dashboard in /admin with queue links', function () {
     $response->assertSee(DocumentResource::getUrl('edit', ['record' => $document]), false);
 });
 
+it('hides create document actions in dashboard for lector role', function () {
+    $lector = User::factory()->create(['role' => 'lector']);
+    actingAs($lector);
+    $this->withoutVite();
+
+    $category = createCategory('General', 'general');
+    createDocument($category, [
+        'title' => 'Documento Publicado',
+        'status' => 'Publicado',
+    ]);
+
+    $response = $this->get('/admin');
+
+    $response->assertStatus(200);
+    $response->assertDontSee('Nuevo documento');
+    $response->assertDontSee('href="' . DocumentResource::getUrl('create') . '"', false);
+});
+
 it('applies category filter through documents query string alias', function () {
     $rector = User::factory()->create(['role' => 'rector']);
     actingAs($rector);

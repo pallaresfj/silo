@@ -2,9 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\Models\AllowedGoogleAccount;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class AdminUserSeeder extends Seeder
 {
@@ -13,12 +14,27 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
-        User::firstOrCreate(
+        $user = User::firstOrCreate(
             ['email' => 'rectoria@iedagropivijay.edu.co'],
             [
                 'name' => 'Francisco Pallares De la Hoz',
-                'password' => Hash::make('pass1234'),
+                'password' => null,
                 'role' => 'rector',
+            ]
+        );
+
+        $role = Role::query()->where('slug', 'rector')->first();
+
+        if ($role) {
+            $user->roles()->syncWithoutDetaching([$role->id]);
+        }
+
+        AllowedGoogleAccount::query()->updateOrCreate(
+            ['email' => 'rectoria@iedagropivijay.edu.co'],
+            [
+                'default_role_slug' => 'rector',
+                'is_active' => true,
+                'notes' => 'Cuenta administrativa inicial',
             ]
         );
     }
