@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\DocumentResource\Pages;
 use App\Models\DocumentCategory;
 use App\Models\Document;
+use App\Models\Entity;
 use App\Support\GoogleDriveHelper;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -141,6 +142,11 @@ class DocumentResource extends Resource
                             ->required()
                             ->searchable()
                             ->preload()
+                            ->createOptionAction(fn (Action $action): Action => $action
+                                ->authorize(fn (): bool => auth()->user()?->can('create', DocumentCategory::class) ?? false)
+                                ->authorizationNotification()
+                                ->authorizationMessage('No tienes permisos para crear categorías.')
+                            )
                             ->createOptionForm([
                                 TextInput::make('name')
                                     ->label('Nombre')
@@ -149,6 +155,7 @@ class DocumentResource extends Resource
                                 TextInput::make('slug')
                                     ->label('Slug')
                                     ->maxLength(100)
+                                    ->unique(DocumentCategory::class, 'slug')
                                     ->helperText('Se genera automáticamente si se deja vacío'),
                                 ColorPicker::make('color')
                                     ->label('Color del badge')
@@ -162,6 +169,11 @@ class DocumentResource extends Resource
                             ->relationship('entity', 'name')
                             ->searchable()
                             ->preload()
+                            ->createOptionAction(fn (Action $action): Action => $action
+                                ->authorize(fn (): bool => auth()->user()?->can('create', Entity::class) ?? false)
+                                ->authorizationNotification()
+                                ->authorizationMessage('No tienes permisos para crear entidades.')
+                            )
                             ->createOptionForm([
                                 TextInput::make('name')
                                     ->label('Nombre')
