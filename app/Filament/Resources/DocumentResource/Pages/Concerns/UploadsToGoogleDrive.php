@@ -5,6 +5,7 @@ namespace App\Filament\Resources\DocumentResource\Pages\Concerns;
 use App\Models\DocumentCategory;
 use App\Models\Entity;
 use App\Support\GoogleDriveHelper;
+use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Drive\DriveFile;
 use Illuminate\Support\Facades\Log;
 
@@ -185,7 +186,7 @@ trait UploadsToGoogleDrive
         $reason = null;
         $apiMessage = null;
 
-        if (method_exists($e, 'getErrors')) {
+        if ($e instanceof GoogleServiceException) {
             $errors = $e->getErrors();
             if (is_array($errors) && isset($errors[0]) && is_array($errors[0])) {
                 $reason = $errors[0]['reason'] ?? null;
