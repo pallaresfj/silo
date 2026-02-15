@@ -39,6 +39,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\LazyCollection;
 use Illuminate\Support\Str;
 use Throwable;
@@ -143,7 +144,7 @@ class DocumentResource extends Resource
                             ->searchable()
                             ->preload()
                             ->createOptionAction(fn (Action $action): Action => $action
-                                ->authorize(fn (): bool => auth()->user()?->can('create', DocumentCategory::class) ?? false)
+                                ->authorize(fn (): bool => Gate::allows('create', DocumentCategory::class))
                                 ->authorizationNotification()
                                 ->authorizationMessage('No tienes permisos para crear categorías.')
                             )
@@ -170,7 +171,7 @@ class DocumentResource extends Resource
                             ->searchable()
                             ->preload()
                             ->createOptionAction(fn (Action $action): Action => $action
-                                ->authorize(fn (): bool => auth()->user()?->can('create', Entity::class) ?? false)
+                                ->authorize(fn (): bool => Gate::allows('create', Entity::class))
                                 ->authorizationNotification()
                                 ->authorizationMessage('No tienes permisos para crear entidades.')
                             )
