@@ -15,7 +15,9 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Facades\Auth;
 
 class UserResource extends Resource
 {
@@ -133,7 +135,12 @@ class UserResource extends Resource
                     ->iconButton()
                     ->hiddenLabel()
                     ->tooltip('Borrar')
-                    ->visible(fn (User $record): bool => auth()->id() !== $record->id),
+                    ->visible(function (User $record): bool {
+                        /** @var Authenticatable|null $currentUser */
+                        $currentUser = Auth::guard()->user();
+
+                        return $currentUser?->getAuthIdentifier() !== $record->getKey();
+                    }),
             ]);
     }
 
