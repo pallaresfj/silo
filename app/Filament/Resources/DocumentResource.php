@@ -30,7 +30,6 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Colors\Color;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Exceptions\Halt;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
@@ -254,16 +253,11 @@ class DocumentResource extends Resource
                         'Importado_Sin_Clasificar' => 'danger',
                         default => 'gray',
                     }),
-
-                IconColumn::make('gdrive_url')
-                    ->label('Drive')
-                    ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->url(fn($record): ?string => $record->gdrive_url, shouldOpenInNewTab: true)
-                    ->boolean()
-                    ->trueIcon('heroicon-o-arrow-top-right-on-square')
-                    ->falseIcon('heroicon-o-minus-circle')
-                    ->toggleable(),
             ])
+            ->recordUrl(
+                fn (Document $record): ?string => filled($record->gdrive_url) ? $record->gdrive_url : null,
+                shouldOpenInNewTab: true
+            )
             ->defaultSort('created_at', 'desc')
             ->filters([
                 SelectFilter::make('year')

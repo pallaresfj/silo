@@ -11,6 +11,28 @@ use Illuminate\Support\Facades\Log;
 trait UploadsToGoogleDrive
 {
     /**
+     * Normalize Filament/Livewire attachment payloads to a local storage path.
+     */
+    protected function resolveAttachmentPath(mixed $attachment): ?string
+    {
+        if (is_string($attachment)) {
+            return $attachment;
+        }
+
+        if (is_array($attachment)) {
+            foreach ($attachment as $value) {
+                $resolvedPath = $this->resolveAttachmentPath($value);
+
+                if (filled($resolvedPath)) {
+                    return $resolvedPath;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Upload a file to Google Drive using the API with Shared Drive support.
      * Creates folder structure {Year}/{Category} automatically.
      *

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\DocumentResource\Pages;
 use App\Filament\Resources\DocumentResource;
 use App\Filament\Resources\DocumentResource\Pages\Concerns\UploadsToGoogleDrive;
 use App\Models\Document;
+use App\Support\GoogleDriveHelper;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -17,6 +18,7 @@ class EditDocument extends EditRecord
     use UploadsToGoogleDrive;
 
     protected static string $resource = DocumentResource::class;
+    protected ?string $previousDriveIdToDelete = null;
 
     protected function getHeaderActions(): array
     {
@@ -58,6 +60,8 @@ class EditDocument extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $this->previousDriveIdToDelete = null;
+        $currentDriveId = (string) ($this->record->gdrive_id ?? '');
         $creationMode = $data['creation_mode'] ?? 'upload';
         $driveNativeType = $data['drive_native_type'] ?? 'document';
         $attachment = $data['attachment'] ?? null;
@@ -84,6 +88,10 @@ class EditDocument extends EditRecord
                     $data['gdrive_id'] = $result['id'];
                     $data['gdrive_url'] = $result['webViewLink'];
                     $data['file_name'] = $result['fileName'];
+
+                    if (! blank($currentDriveId) && $currentDriveId !== (string) $data['gdrive_id']) {
+                        $this->previousDriveIdToDelete = $currentDriveId;
+                    }
                 }
 
                 Log::info('Native document created in Google Drive from edit', [
@@ -114,7 +122,7 @@ class EditDocument extends EditRecord
                 throw new Halt;
             } finally {
                 if ($attachment) {
-                    $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
+                    $localPath = $this->resolveAttachmentPath($attachment);
 
                     if ($localPath && Storage::disk('local')->exists($localPath)) {
                         Storage::disk('local')->delete($localPath);
@@ -126,7 +134,7 @@ class EditDocument extends EditRecord
         }
 
         if ($attachment) {
-            $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
+            $localPath = $this->resolveAttachmentPath($attachment);
 
             if ($localPath && Storage::disk('local')->exists($localPath)) {
                 $originalName = basename($localPath);
@@ -150,6 +158,10 @@ class EditDocument extends EditRecord
                     if ($result) {
                         $data['gdrive_id'] = $result['id'];
                         $data['gdrive_url'] = $result['webViewLink'] ?? "https://drive.google.com/file/d/{$result['id']}/view";
+
+                        if (! blank($currentDriveId) && $currentDriveId !== (string) $data['gdrive_id']) {
+                            $this->previousDriveIdToDelete = $currentDriveId;
+                        }
                     }
 
                     Log::info('Document updated on Google Drive', [
@@ -197,6 +209,34 @@ class EditDocument extends EditRecord
         }
 
         return $data;
+    }
+
+    protected function afterSave(): void
+    {
+        $oldDriveId = $this->previousDriveIdToDelete;
+        $this->previousDriveIdToDelete = null;
+
+        if (blank($oldDriveId)) {
+            return;
+        }
+
+        try {
+            GoogleDriveHelper::deleteOrTrashFile((string) $oldDriveId);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to delete previous Google Drive file after replacement', [
+                'document_id' => $this->record->id,
+                'old_gdrive_id' => $oldDriveId,
+                'new_gdrive_id' => $this->record->gdrive_id,
+                'error' => $e->getMessage(),
+            ]);
+
+            Notification::make()
+                ->warning()
+                ->title('Documento actualizado, pero el archivo anterior no se pudo eliminar')
+                ->body('El nuevo archivo quedó guardado. Revisa permisos de Google Drive para limpiar el archivo anterior.')
+                ->persistent()
+                ->send();
+        }
     }
 
     protected function getRedirectUrl(): string

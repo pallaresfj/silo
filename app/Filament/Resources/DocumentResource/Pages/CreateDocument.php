@@ -73,7 +73,7 @@ class CreateDocument extends CreateRecord
                 throw new Halt;
             } finally {
                 if ($attachment) {
-                    $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
+                    $localPath = $this->resolveAttachmentPath($attachment);
 
                     if ($localPath && Storage::disk('local')->exists($localPath)) {
                         Storage::disk('local')->delete($localPath);
@@ -85,7 +85,7 @@ class CreateDocument extends CreateRecord
         }
 
         if ($attachment) {
-            $localPath = is_array($attachment) ? collect($attachment)->first() : $attachment;
+            $localPath = $this->resolveAttachmentPath($attachment);
 
             if ($localPath && Storage::disk('local')->exists($localPath)) {
                 $originalName = basename($localPath);
