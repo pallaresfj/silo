@@ -33,6 +33,11 @@ class EditDocumentCategory extends EditRecord
         $newName = (string) ($data['name'] ?? $oldName);
         $newSlug = (string) ($data['slug'] ?? $oldSlug);
 
+        if (blank($newSlug)) {
+            $newSlug = Str::slug($newName);
+            $data['slug'] = $newSlug;
+        }
+
         if (($newName !== $oldName) && ($newSlug === $oldSlug)) {
             $newSlug = Str::slug($newName);
             $data['slug'] = $newSlug;
@@ -74,4 +79,3 @@ class EditDocumentCategory extends EditRecord
         return static::getResource()::getUrl('index');
     }
 }
-

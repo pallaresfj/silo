@@ -71,9 +71,8 @@ class DocumentCategoryResource extends Resource
 
                         TextInput::make('slug')
                             ->label('Slug')
-                            ->required()
                             ->maxLength(100)
-                            ->helperText('Se usa para la estructura de carpetas en Google Drive.')
+                            ->helperText('Se genera automáticamente si se deja vacío.')
                             ->unique(ignoreRecord: true),
 
                         ColorPicker::make('color')
