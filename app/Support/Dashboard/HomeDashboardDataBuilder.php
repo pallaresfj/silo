@@ -21,6 +21,11 @@ class HomeDashboardDataBuilder
      * @return array{
      *     metrics: array{pending: int, approved: int, archived: int},
      *     metricLinks: array{pending: string, approved: string, archived: string},
+     *     unclassifiedAlert: array{
+     *         count: int,
+     *         filteredUrl: string,
+     *         items: array<int, array{id: string, title: string, path: string|null, openUrl: ?string, editUrl: string}>
+     *     },
      *     topCategories: array<int, array{id: string, name: string, slug: string, count: int, color: string, textColor: string, icon: string, filteredUrl: string}>,
      *     reviewQueue: array<int, array{id: string, title: string, status: string, entityName: ?string, categoryName: ?string, icon: string, createdAtHuman: ?string, openUrl: ?string, editUrl: string}>,
      *     links: array{documentsIndex: string, createDocument: string},
@@ -32,6 +37,7 @@ class HomeDashboardDataBuilder
         return [
             'metrics' => $this->getMetrics(),
             'metricLinks' => $this->getMetricLinks(),
+            'unclassifiedAlert' => $this->getUnclassifiedAlert(),
             'topCategories' => $this->getTopCategories(),
             'reviewQueue' => $this->getReviewQueue(),
             'links' => [
@@ -77,6 +83,43 @@ class HomeDashboardDataBuilder
             'pending' => $this->buildDashboardBucketUrl('pending'),
             'approved' => $this->buildDashboardBucketUrl('approved'),
             'archived' => $this->buildDashboardBucketUrl('archived', includeTrashed: true),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     count: int,
+     *     filteredUrl: string,
+     *     items: array<int, array{id: string, title: string, path: string|null, openUrl: ?string, editUrl: string}>
+     * }
+     */
+    protected function getUnclassifiedAlert(): array
+    {
+        $query = Document::query()
+            ->where('status', 'Importado_Sin_Clasificar')
+            ->orderByDesc('created_at');
+
+        $count = (clone $query)->count();
+        $limit = max(1, (int) config('drive_sync.dashboard_top_items', 5));
+
+        $items = $query
+            ->limit($limit)
+            ->get()
+            ->map(function (Document $document): array {
+                return [
+                    'id' => (string) $document->id,
+                    'title' => (string) $document->title,
+                    'path' => $document->metadata['import_path'] ?? null,
+                    'openUrl' => $this->resolveDocumentOpenUrl($document),
+                    'editUrl' => DocumentResource::getUrl('edit', ['record' => $document]),
+                ];
+            })
+            ->all();
+
+        return [
+            'count' => $count,
+            'filteredUrl' => $this->buildStatusFilterUrl('Importado_Sin_Clasificar'),
+            'items' => $items,
         ];
     }
 
@@ -170,6 +213,20 @@ class HomeDashboardDataBuilder
         }
 
         $query = http_build_query($params);
+
+        return "{$baseUrl}?{$query}";
+    }
+
+    protected function buildStatusFilterUrl(string $status): string
+    {
+        $baseUrl = DocumentResource::getUrl('index');
+        $query = http_build_query([
+            'filters' => [
+                'status' => [
+                    'value' => $status,
+                ],
+            ],
+        ]);
 
         return "{$baseUrl}?{$query}";
     }

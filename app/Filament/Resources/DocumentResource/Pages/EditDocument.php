@@ -12,6 +12,7 @@ use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class EditDocument extends EditRecord
 {
@@ -213,6 +214,8 @@ class EditDocument extends EditRecord
 
     protected function afterSave(): void
     {
+        $this->syncCurrentDriveFile();
+
         $oldDriveId = $this->previousDriveIdToDelete;
         $this->previousDriveIdToDelete = null;
 
@@ -237,6 +240,103 @@ class EditDocument extends EditRecord
                 ->persistent()
                 ->send();
         }
+    }
+
+    protected function syncCurrentDriveFile(): void
+    {
+        $currentDriveId = (string) ($this->record->gdrive_id ?? '');
+
+        if ($currentDriveId === '') {
+            return;
+        }
+
+        try {
+            $categorySlug = $this->getCategorySlug($this->record->category_id);
+            $entityFolder = $this->getEntityFolder($this->record->entity_id);
+            $targetFolderId = GoogleDriveHelper::ensureDocumentFolder(
+                $this->record->year ?? now()->year,
+                $categorySlug,
+                $entityFolder
+            );
+
+            $driveFileName = $this->resolveDesiredDriveFileName();
+            $dbFileName = $this->resolveDesiredDatabaseFileName($driveFileName);
+
+            $renameResult = GoogleDriveHelper::renameFile($currentDriveId, $driveFileName);
+            $moveResult = GoogleDriveHelper::moveFileToFolder($currentDriveId, $targetFolderId);
+
+            if ($dbFileName !== (string) $this->record->file_name) {
+                $this->record->forceFill(['file_name' => $dbFileName])->saveQuietly();
+            }
+
+            Log::info('Google Drive file synchronized after document edit', [
+                'document_id' => $this->record->id,
+                'gdrive_id' => $currentDriveId,
+                'rename_result' => $renameResult,
+                'move_result' => $moveResult,
+                'target_folder_id' => $targetFolderId,
+                'target_file_name' => $driveFileName,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to synchronize Google Drive file after edit', [
+                'document_id' => $this->record->id,
+                'gdrive_id' => $currentDriveId,
+                'error' => $e->getMessage(),
+            ]);
+
+            Notification::make()
+                ->warning()
+                ->title('Documento actualizado parcialmente')
+                ->body('Se guardaron los metadatos, pero no fue posible actualizar nombre o ubicación en Google Drive.')
+                ->persistent()
+                ->send();
+        }
+    }
+
+    protected function resolveDesiredDriveFileName(): string
+    {
+        $currentFileName = (string) ($this->record->file_name ?? '');
+        $extension = Str::lower((string) pathinfo($currentFileName, PATHINFO_EXTENSION));
+
+        $title = trim((string) ($this->record->title ?? ''));
+        if ($title === '') {
+            $title = trim((string) pathinfo($currentFileName, PATHINFO_FILENAME));
+        }
+        if ($title === '') {
+            $title = 'documento';
+        }
+
+        $title = str_replace(['/', '\\'], '-', $title);
+
+        if ($extension !== '' && Str::endsWith(Str::lower($title), ".{$extension}")) {
+            $title = substr($title, 0, -1 * (strlen($extension) + 1));
+        }
+
+        if ($extension === '' || in_array($extension, ['gdoc', 'gsheet', 'gslides'], true)) {
+            return $title;
+        }
+
+        return "{$title}.{$extension}";
+    }
+
+    protected function resolveDesiredDatabaseFileName(string $driveFileName): string
+    {
+        $currentFileName = (string) ($this->record->file_name ?? '');
+        $extension = Str::lower((string) pathinfo($currentFileName, PATHINFO_EXTENSION));
+
+        if ($extension === '') {
+            return $driveFileName;
+        }
+
+        if (in_array($extension, ['gdoc', 'gsheet', 'gslides'], true)) {
+            if (Str::endsWith(Str::lower($driveFileName), ".{$extension}")) {
+                return $driveFileName;
+            }
+
+            return "{$driveFileName}.{$extension}";
+        }
+
+        return $driveFileName;
     }
 
     protected function getRedirectUrl(): string

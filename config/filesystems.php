@@ -69,6 +69,11 @@ return [
             'client_email' => env('GOOGLE_DRIVE_CLIENT_EMAIL'),
             'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
             'folder' => env('GOOGLE_DRIVE_FOLDER_ID'),
+            'templates' => [
+                'document' => env('GOOGLE_DRIVE_TEMPLATE_DOCUMENT_ID'),
+                'spreadsheet' => env('GOOGLE_DRIVE_TEMPLATE_SPREADSHEET_ID'),
+                'presentation' => env('GOOGLE_DRIVE_TEMPLATE_PRESENTATION_ID'),
+            ],
         ],
 
     ],

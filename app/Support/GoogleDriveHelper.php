@@ -237,6 +237,54 @@ class GoogleDriveHelper
     }
 
     /**
+     * @return 'renamed'|'unchanged'|'missing'
+     */
+    public static function renameFile(string $fileId, string $newName): string
+    {
+        $newName = trim($newName);
+
+        if ($newName === '') {
+            return 'unchanged';
+        }
+
+        $service = static::makeService();
+
+        try {
+            $file = $service->files->get($fileId, [
+                'fields' => 'id,name,capabilities(canEdit)',
+                'supportsAllDrives' => true,
+            ]);
+        } catch (\Google\Service\Exception $e) {
+            $reason = $e->getErrors()[0]['reason'] ?? null;
+
+            if ($reason === 'notFound') {
+                return 'missing';
+            }
+
+            throw $e;
+        }
+
+        if ((string) $file->getName() === $newName) {
+            return 'unchanged';
+        }
+
+        if (! (bool) $file->getCapabilities()?->getCanEdit()) {
+            throw new \RuntimeException('The service account cannot rename this Drive file.');
+        }
+
+        $service->files->update(
+            $fileId,
+            new DriveFile(['name' => $newName]),
+            [
+                'fields' => 'id,name',
+                'supportsAllDrives' => true,
+            ]
+        );
+
+        return 'renamed';
+    }
+
+    /**
      * @return 'moved'|'already'|'missing'
      */
     public static function moveFileToFolder(string $fileId, string $targetFolderId): string

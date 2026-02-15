@@ -186,6 +186,21 @@ No se migrarán archivos manualmente. Se creará un **Filament Custom Page** o u
         - `year`: Extraído de la fecha de creación del archivo.
             
         - `status`: 'Importado_Sin_Clasificar'.
+
+---
+
+## 5. Operacion de sincronizacion Drive
+
+- Comando programado (cron interno Laravel Scheduler):
+  - `php artisan drive:sync-unclassified`
+  - Frecuencia: cada hora.
+  - Proposito: detectar archivos creados fuera de la app e importarlos para clasificacion.
+- Bootstrap manual inicial (cuando se necesite reconstruir estado):
+  - `php artisan drive:sync-unclassified --bootstrap`
+- Comando de limpieza de huérfanos:
+  - `php artisan drive:cleanup-orphans`
+  - Uso: solo manual para incidentes o soporte.
+  - Regla: no debe programarse en cron.
             
 
 ---

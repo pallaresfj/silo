@@ -28,6 +28,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Colors\Color;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Exceptions\Halt;
@@ -133,6 +134,7 @@ class DocumentResource extends Resource
                     ->schema([
                         TextInput::make('title')
                             ->label('Título')
+                            ->default(fn (string $operation): ?string => $operation === 'create' ? now()->year . ' - ' : null)
                             ->required()
                             ->maxLength(255)
                             ->columnSpanFull(),
@@ -193,6 +195,31 @@ class DocumentResource extends Resource
                             ->label('Año')
                             ->numeric()
                             ->default(now()->year)
+                            ->live()
+                            ->afterStateUpdated(function (Get $get, Set $set, mixed $state, mixed $old): void {
+                                if (! is_numeric($state)) {
+                                    return;
+                                }
+
+                                $newPrefix = ((int) $state) . ' - ';
+                                $title = (string) ($get('title') ?? '');
+
+                                if (trim($title) === '' || preg_match('/^\d{4} - $/', $title) === 1) {
+                                    $set('title', $newPrefix);
+
+                                    return;
+                                }
+
+                                if (! is_numeric($old)) {
+                                    return;
+                                }
+
+                                $oldPrefix = ((int) $old) . ' - ';
+
+                                if (Str::startsWith($title, $oldPrefix)) {
+                                    $set('title', $newPrefix . Str::after($title, $oldPrefix));
+                                }
+                            })
                             ->required()
                             ->minValue(2010)
                             ->maxValue(2099),

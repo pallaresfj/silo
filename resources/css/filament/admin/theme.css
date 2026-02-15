@@ -44,7 +44,9 @@
     display: grid;
     gap: 0.65rem;
     grid-template-columns: 1fr;
+    max-width: 52rem;
     padding: 0.8rem;
+    width: 100%;
 }
 
 .silo-dashboard-search-input {
@@ -204,6 +206,26 @@
 .silo-dashboard-section {
     display: grid;
     gap: 1rem;
+}
+
+.silo-dashboard-alert-card {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: var(--silo-radius-lg);
+    padding: 1rem 1.1rem;
+}
+
+.silo-dashboard-alert-card__title {
+    color: #92400e;
+    font-size: 1rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.silo-dashboard-alert-card__text {
+    color: #a16207;
+    font-size: 0.92rem;
+    margin: 0.35rem 0 0;
 }
 
 .silo-dashboard-section__header {
@@ -473,6 +495,19 @@
 
 .dark .silo-dashboard-link {
     color: #67e8f9;
+}
+
+.dark .silo-dashboard-alert-card {
+    background: #422006;
+    border-color: #78350f;
+}
+
+.dark .silo-dashboard-alert-card__title {
+    color: #fef3c7;
+}
+
+.dark .silo-dashboard-alert-card__text {
+    color: #fcd34d;
 }
 
 .dark .silo-dashboard-category-card {

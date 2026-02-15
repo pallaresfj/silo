@@ -127,24 +127,47 @@ trait UploadsToGoogleDrive
             ] = $this->resolveNativeDriveDocumentType($nativeType);
 
             $normalizedTitle = trim($title) !== '' ? trim($title) : 'Documento sin titulo';
+            $templateId = $this->resolveNativeDriveTemplateId($nativeType);
 
-            $fileMetadata = new DriveFile([
-                'name' => $normalizedTitle,
-                'mimeType' => $mimeType,
-                'parents' => [$targetFolderId],
-            ]);
+            if (filled($templateId)) {
+                $file = $service->files->copy(
+                    $templateId,
+                    new DriveFile([
+                        'name' => $normalizedTitle,
+                        'parents' => [$targetFolderId],
+                    ]),
+                    [
+                        'fields' => 'id,name,webViewLink',
+                        'supportsAllDrives' => true,
+                    ]
+                );
 
-            $file = $service->files->create($fileMetadata, [
-                'fields' => 'id,name,webViewLink',
-                'supportsAllDrives' => true,
-            ]);
+                Log::info('Native Drive document created from template', [
+                    'title' => $normalizedTitle,
+                    'nativeType' => $nativeType,
+                    'templateId' => $templateId,
+                    'driveId' => $file->getId(),
+                    'folder' => $this->buildFolderLogPath($year, $categorySlug, $entityFolder),
+                ]);
+            } else {
+                $fileMetadata = new DriveFile([
+                    'name' => $normalizedTitle,
+                    'mimeType' => $mimeType,
+                    'parents' => [$targetFolderId],
+                ]);
 
-            Log::info('Native Drive document created', [
-                'title' => $normalizedTitle,
-                'nativeType' => $nativeType,
-                'driveId' => $file->getId(),
-                'folder' => $this->buildFolderLogPath($year, $categorySlug, $entityFolder),
-            ]);
+                $file = $service->files->create($fileMetadata, [
+                    'fields' => 'id,name,webViewLink',
+                    'supportsAllDrives' => true,
+                ]);
+
+                Log::info('Native Drive document created', [
+                    'title' => $normalizedTitle,
+                    'nativeType' => $nativeType,
+                    'driveId' => $file->getId(),
+                    'folder' => $this->buildFolderLogPath($year, $categorySlug, $entityFolder),
+                ]);
+            }
 
             return [
                 'id' => $file->getId(),
@@ -269,5 +292,16 @@ trait UploadsToGoogleDrive
                 'fallbackUrl' => 'https://docs.google.com/document/d/%s/edit',
             ],
         };
+    }
+
+    protected function resolveNativeDriveTemplateId(string $nativeType): ?string
+    {
+        $templateId = match ($nativeType) {
+            'spreadsheet' => config('filesystems.disks.google.templates.spreadsheet'),
+            'presentation' => config('filesystems.disks.google.templates.presentation'),
+            default => config('filesystems.disks.google.templates.document'),
+        };
+
+        return filled($templateId) ? (string) $templateId : null;
     }
 }

@@ -96,6 +96,71 @@
             </a>
         </section>
 
+        @if (($unclassifiedAlert['count'] ?? 0) > 0)
+            <section class="silo-dashboard-section silo-dashboard-alert">
+                <div class="silo-dashboard-section__header">
+                    <h2 class="silo-dashboard-section__title">Archivos Sin Clasificar</h2>
+                    <a
+                        href="{{ $unclassifiedAlert['filteredUrl'] }}"
+                        class="silo-dashboard-link"
+                    >
+                        Revisar ahora
+                    </a>
+                </div>
+
+                <article class="silo-dashboard-alert-card">
+                    <p class="silo-dashboard-alert-card__title">
+                        Hay {{ number_format($unclassifiedAlert['count']) }} archivo(s) importado(s) por fuera de la app.
+                    </p>
+                    <p class="silo-dashboard-alert-card__text">
+                        Clasificalos para que entren al flujo editorial normal.
+                    </p>
+                </article>
+
+                @if (count($unclassifiedAlert['items']) > 0)
+                    <div class="silo-dashboard-review-list">
+                        @foreach ($unclassifiedAlert['items'] as $item)
+                            <article class="silo-dashboard-review-item">
+                                <span class="silo-dashboard-review-item__icon">
+                                    <x-filament::icon
+                                        icon="heroicon-o-exclamation-triangle"
+                                        class="silo-dashboard-review-item__icon-svg"
+                                    />
+                                </span>
+
+                                <div class="silo-dashboard-review-item__content">
+                                    <p class="silo-dashboard-review-item__title">{{ $item['title'] }}</p>
+                                    <p class="silo-dashboard-review-item__meta">
+                                        Ruta detectada: {{ $item['path'] ?? 'No disponible' }}
+                                    </p>
+                                </div>
+
+                                <div class="silo-dashboard-review-item__actions">
+                                    @if ($item['openUrl'])
+                                        <a
+                                            href="{{ $item['openUrl'] }}"
+                                            class="silo-dashboard-open-btn"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            Abrir
+                                        </a>
+                                    @endif
+
+                                    <a
+                                        href="{{ $item['editUrl'] }}"
+                                        class="silo-dashboard-edit-btn"
+                                    >
+                                        Clasificar
+                                    </a>
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </section>
+        @endif
+
         <section class="silo-dashboard-section">
             <div class="silo-dashboard-section__header">
                 <h2 class="silo-dashboard-section__title">Categorías Principales</h2>

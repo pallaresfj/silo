@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Support\Drive\Contracts\DriveSyncGateway;
+use App\Support\Drive\GoogleDriveSyncGateway;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
@@ -14,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(DriveSyncGateway::class, GoogleDriveSyncGateway::class);
     }
 
     /**
