@@ -71,7 +71,7 @@ class DriveImportClassifier
             year: $year,
             categoryId: $categoryId,
             entityId: $entityId,
-            status: $isHighConfidence ? 'Borrador' : 'Importado_Sin_Clasificar',
+            status: 'Importado_Sin_Clasificar',
             confidence: $confidence,
             title: $this->buildTitle($fileName),
             fileName: $fileName,

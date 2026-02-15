@@ -35,6 +35,7 @@ use Filament\Support\Exceptions\Halt;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -239,6 +240,8 @@ class DocumentResource extends Resource
                         TagsInput::make('metadata.tags')
                             ->label('Etiquetas')
                             ->placeholder('Agregar etiqueta...')
+                            ->splitKeys([',', 'Tab'])
+                            ->helperText('Escribe una etiqueta y presiona Enter, coma o Tab para agregar otra.')
                             ->columnSpanFull(),
                     ])
                     ->columnSpanFull(),
@@ -251,7 +254,6 @@ class DocumentResource extends Resource
             ->columns([
                 TextColumn::make('year')
                     ->label('Año')
-                    ->sortable()
                     ->badge()
                     ->color('gray'),
 
@@ -260,8 +262,21 @@ class DocumentResource extends Resource
                     ->weight(FontWeight::Bold)
                     ->icon(fn (Document $record): string => static::resolveDocumentTypeIcon($record->file_name))
                     ->iconColor(fn (Document $record): string => static::resolveDocumentTypeIconColor($record->file_name))
-                    ->searchable()
-                    ->sortable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        $term = Str::of($search)->lower()->trim()->toString();
+
+                        if ($term === '') {
+                            return $query;
+                        }
+
+                        $likeTerm = "%{$term}%";
+
+                        return $query->where(function (Builder $subQuery) use ($likeTerm): void {
+                            $subQuery
+                                ->whereRaw('LOWER(title) LIKE ?', [$likeTerm])
+                                ->orWhereRaw("LOWER(COALESCE(JSON_EXTRACT(metadata, '$.tags'), '')) LIKE ?", [$likeTerm]);
+                        });
+                    })
                     ->limit(50)
                     ->tooltip(
                         fn (Document $record): string => sprintf(
@@ -283,6 +298,12 @@ class DocumentResource extends Resource
                     ->searchable()
                     ->toggleable(),
 
+                TextColumn::make('metadata.tags')
+                    ->label('Etiquetas')
+                    ->lineClamp(2)
+                    ->wrap()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
@@ -296,10 +317,18 @@ class DocumentResource extends Resource
                     }),
             ])
             ->recordUrl(
-                fn (Document $record): ?string => filled($record->gdrive_url) ? $record->gdrive_url : null,
+                fn (Document $record): ?string => $record->resolveOpenUrlForCurrentUser(),
                 shouldOpenInNewTab: true
             )
-            ->defaultSort('created_at', 'desc')
+            ->groups([
+                Group::make('year')
+                    ->label('Año')
+                    ->orderQueryUsing(fn (Builder $query, string $direction): Builder => $query->orderBy('year', 'desc')),
+            ])
+            ->defaultGroup('year')
+            ->groupingSettingsHidden()
+            ->groupingDirectionSettingHidden()
+            ->defaultSort('updated_at', 'desc')
             ->filters([
                 SelectFilter::make('year')
                     ->label('Año')
@@ -357,6 +386,18 @@ class DocumentResource extends Resource
                 TrashedFilter::make(),
             ])
             ->actions([
+                Action::make('openDrive')
+                    ->label('Abrir en Drive')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->iconButton()
+                    ->hiddenLabel()
+                    ->tooltip('Abrir en Drive')
+                    ->url(
+                        fn (Document $record): ?string => $record->resolveOpenUrlForCurrentUser(),
+                        shouldOpenInNewTab: true
+                    )
+                    ->visible(fn (Document $record): bool => filled($record->resolveOpenUrlForCurrentUser())),
+
                 Action::make('preview')
                     ->label('Vista Previa')
                     ->icon('heroicon-o-eye')
@@ -365,10 +406,10 @@ class DocumentResource extends Resource
                     ->tooltip('Vista previa')
                     ->modalHeading(fn($record): string => $record->title)
                     ->modalContent(fn($record) => view('filament.resources.document-resource.preview', [
-                        'url' => $record->gdrive_url,
+                        'url' => $record->resolveOpenUrlForCurrentUser(),
                     ]))
                     ->modalWidth('7xl')
-                    ->visible(fn($record): bool => !empty($record->gdrive_url)),
+                    ->visible(fn($record): bool => filled($record->resolveOpenUrlForCurrentUser())),
 
                 EditAction::make()
                     ->iconButton()

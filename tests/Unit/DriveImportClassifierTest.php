@@ -35,7 +35,7 @@ class DriveImportClassifierTest extends TestCase
         $this->assertSame(2026, $result->year);
         $this->assertSame((string) $category->id, $result->categoryId);
         $this->assertSame((string) $entity->id, $result->entityId);
-        $this->assertSame('Borrador', $result->status);
+        $this->assertSame('Importado_Sin_Clasificar', $result->status);
         $this->assertSame('high', $result->confidence);
         $this->assertSame('certificado', $result->title);
     }

@@ -149,7 +149,8 @@ it('limits the review queue to five items and keeps newest first', function () {
     expect($data['reviewQueue'][0]['editUrl'])
         ->toBe(DocumentResource::getUrl('edit', ['record' => $newest]));
     expect($data['reviewQueue'][0]['openUrl'])
-        ->toBe('https://drive.google.com/file/d/test-abc/view');
+        ->toContain('https://drive.google.com/file/d/test-abc/view')
+        ->toContain('authuser=' . urlencode((string) $rector->email));
     expect($data['reviewQueue'][0]['icon'])
         ->toBe('heroicon-o-document');
     expect(array_column($data['reviewQueue'], 'title'))
@@ -196,6 +197,7 @@ it('renders the new dashboard in /admin with queue links', function () {
     $response->assertSee('Abrir');
     $response->assertSee('Editar');
     $response->assertSee('https://drive.google.com/file/d/file-987/view', false);
+    $response->assertSee('authuser=' . urlencode((string) $rector->email), false);
     $response->assertSee(DocumentResource::getUrl('edit', ['record' => $document]), false);
 });
 
@@ -307,6 +309,36 @@ it('applies documents search query string alias', function () {
 
     $response->assertStatus(200);
     $response->assertSee((string) $docMatch->title);
+    $response->assertDontSee((string) $docOther->title);
+});
+
+it('applies documents search query string alias using metadata tags', function () {
+    $rector = User::factory()->create(['role' => 'rector']);
+    actingAs($rector);
+    $this->withoutVite();
+
+    $category = createCategory('General', 'general');
+
+    $docByTag = createDocument($category, [
+        'title' => 'Archivo General',
+        'status' => 'Publicado',
+        'metadata' => [
+            'tags' => ['oficio', 'legal', '2026'],
+        ],
+    ]);
+
+    $docOther = createDocument($category, [
+        'title' => 'Circular Interna',
+        'status' => 'Publicado',
+        'metadata' => [
+            'tags' => ['academico'],
+        ],
+    ]);
+
+    $response = $this->get('/admin/documents?search=legal');
+
+    $response->assertStatus(200);
+    $response->assertSee((string) $docByTag->title);
     $response->assertDontSee((string) $docOther->title);
 });
 

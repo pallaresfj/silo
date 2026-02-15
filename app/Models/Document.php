@@ -4,11 +4,13 @@ namespace App\Models;
 
 use App\Models\Scopes\DocumentVisibilityScope;
 use App\Support\GoogleDriveHelper;
+use App\Support\GoogleDriveUrl;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 
 class Document extends Model
 {
@@ -73,5 +75,16 @@ class Document extends Model
         $entity = GoogleDriveHelper::normalizeEntityFolderName($this->entity->name);
 
         return "SGI-Doc/{$this->year}/{$category}/{$entity}";
+    }
+
+    public function resolveOpenUrlForCurrentUser(): ?string
+    {
+        $email = Auth::user()?->email;
+
+        return GoogleDriveUrl::resolve(
+            storedUrl: $this->gdrive_url,
+            fileId: $this->gdrive_id,
+            email: $email,
+        );
     }
 }

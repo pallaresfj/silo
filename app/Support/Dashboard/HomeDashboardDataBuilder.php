@@ -233,15 +233,7 @@ class HomeDashboardDataBuilder
 
     protected function resolveDocumentOpenUrl(Document $document): ?string
     {
-        if (filled($document->gdrive_url)) {
-            return $document->gdrive_url;
-        }
-
-        if (blank($document->gdrive_id)) {
-            return null;
-        }
-
-        return "https://drive.google.com/file/d/{$document->gdrive_id}/view";
+        return $document->resolveOpenUrlForCurrentUser();
     }
 
     protected function resolveFileTypeIcon(?string $fileName): string

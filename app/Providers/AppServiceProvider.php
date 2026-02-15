@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Filament\Auth\Responses\LogoutResponse as AppLogoutResponse;
 use App\Support\Drive\Contracts\DriveSyncGateway;
 use App\Support\Drive\GoogleDriveSyncGateway;
+use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
@@ -17,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(DriveSyncGateway::class, GoogleDriveSyncGateway::class);
+        $this->app->bind(LogoutResponseContract::class, AppLogoutResponse::class);
     }
 
     /**

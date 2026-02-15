@@ -70,7 +70,7 @@ it('imports orphan files during bootstrap without duplicating existing records',
     expect(Document::withoutGlobalScopes()->where('gdrive_id', 'new-file')->exists())->toBeTrue();
 
     $imported = Document::withoutGlobalScopes()->where('gdrive_id', 'new-file')->firstOrFail();
-    expect($imported->status)->toBe('Borrador');
+    expect($imported->status)->toBe('Importado_Sin_Clasificar');
 
     $state = DriveSyncState::query()->where('key', 'documents_root')->firstOrFail();
     expect($state->last_start_page_token)->toBe('token-bootstrap');

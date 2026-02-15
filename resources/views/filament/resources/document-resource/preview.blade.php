@@ -1,5 +1,16 @@
 <div class="w-full" style="min-height: 600px;">
     @if ($url)
+        <div class="mb-3">
+            <a
+                href="{{ $url }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+                Abrir en nueva pestaña
+            </a>
+        </div>
+
         <iframe src="{{ $url }}" class="w-full rounded-lg border border-gray-200 dark:border-gray-700" style="height: 75vh;"
             allow="autoplay" loading="lazy"></iframe>
     @else
