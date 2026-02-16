@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\AllowedGoogleAccount;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,61 +13,7 @@ afterEach(function (): void {
     Mockery::close();
 });
 
-it('allows login with a verified whitelisted institutional google account', function () {
-    config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
-
-    $role = Role::create([
-        'name' => 'Editor',
-        'slug' => 'editor',
-        'is_system' => true,
-    ]);
-
-    AllowedGoogleAccount::create([
-        'email' => 'docente@iedagropivijay.edu.co',
-        'default_role_slug' => 'editor',
-        'is_active' => true,
-    ]);
-
-    fakeGoogleUserResponse(makeGoogleUser(
-        id: 'google-sub-123',
-        email: 'docente@iedagropivijay.edu.co',
-        verified: true,
-    ));
-
-    $response = $this->get(route('auth.google.callback'));
-
-    $response->assertRedirect();
-    expect($response->headers->get('Location'))->toContain('/admin');
-    $this->assertAuthenticated();
-
-    $user = User::query()->where('email', 'docente@iedagropivijay.edu.co')->first();
-
-    expect($user)->not->toBeNull();
-    expect($user?->google_subject)->toBe('google-sub-123');
-    expect($user?->roles()->pluck('slug')->all())->toContain('editor');
-    expect($user?->role)->toBe('editor');
-    expect($user?->last_google_login_at)->not->toBeNull();
-    expect($role->users()->pluck('users.id')->all())->toContain($user?->id);
-});
-
-it('rejects login when email is not in whitelist', function () {
-    config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
-
-    fakeGoogleUserResponse(makeGoogleUser(
-        id: 'google-sub-999',
-        email: 'sinacceso@iedagropivijay.edu.co',
-        verified: true,
-    ));
-
-    $response = $this->get(route('auth.google.callback'));
-
-    $response->assertRedirect();
-    expect($response->headers->get('Location'))->toContain('/admin/login');
-    $this->assertGuest();
-    expect(User::count())->toBe(0);
-});
-
-it('allows login for pre-provisioned users even without whitelist', function () {
+it('allows login for a pre-registered user with role', function () {
     config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
 
     User::create([
@@ -96,19 +41,84 @@ it('allows login for pre-provisioned users even without whitelist', function () 
     expect($user?->last_google_login_at)->not->toBeNull();
 });
 
-it('rejects login when google email is not verified', function () {
+it('allows login for a pre-registered user with RBAC role', function () {
     config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
 
-    Role::create([
-        'name' => 'Lector',
-        'slug' => 'lector',
+    $role = Role::create([
+        'name' => 'Editor',
+        'slug' => 'editor',
         'is_system' => true,
     ]);
 
-    AllowedGoogleAccount::create([
+    $user = User::create([
+        'name' => 'Docente',
+        'email' => 'docente@iedagropivijay.edu.co',
+        'password' => null,
+        'role' => '',
+    ]);
+    $user->roles()->syncWithoutDetaching([$role->id]);
+
+    fakeGoogleUserResponse(makeGoogleUser(
+        id: 'google-sub-123',
+        email: 'docente@iedagropivijay.edu.co',
+        verified: true,
+    ));
+
+    $response = $this->get(route('auth.google.callback'));
+
+    $response->assertRedirect();
+    expect($response->headers->get('Location'))->toContain('/admin');
+    $this->assertAuthenticated();
+});
+
+it('rejects login when user is not registered in silo', function () {
+    config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
+
+    fakeGoogleUserResponse(makeGoogleUser(
+        id: 'google-sub-999',
+        email: 'sinacceso@iedagropivijay.edu.co',
+        verified: true,
+    ));
+
+    $response = $this->get(route('auth.google.callback'));
+
+    $response->assertRedirect();
+    expect($response->headers->get('Location'))->toContain('/admin/login');
+    $this->assertGuest();
+    expect(User::count())->toBe(0);
+});
+
+it('rejects login when registered user has no assigned role', function () {
+    config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
+
+    User::create([
+        'name' => 'Sin Rol',
+        'email' => 'sinrol@iedagropivijay.edu.co',
+        'password' => null,
+        'role' => '',
+    ]);
+
+    fakeGoogleUserResponse(makeGoogleUser(
+        id: 'google-sub-444',
+        email: 'sinrol@iedagropivijay.edu.co',
+        verified: true,
+    ));
+
+    $response = $this->get(route('auth.google.callback'));
+
+    $response->assertRedirect();
+    expect($response->headers->get('Location'))->toContain('/admin/login');
+    $this->assertGuest();
+});
+
+it('rejects login when google email is not verified', function () {
+    config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
+
+    User::create([
+        'name' => 'Inválido',
         'email' => 'invalido@iedagropivijay.edu.co',
-        'default_role_slug' => 'lector',
-        'is_active' => true,
+        'password' => null,
+        'role' => 'lector',
     ]);
 
     fakeGoogleUserResponse(makeGoogleUser(
@@ -122,7 +132,29 @@ it('rejects login when google email is not verified', function () {
     $response->assertRedirect();
     expect($response->headers->get('Location'))->toContain('/admin/login');
     $this->assertGuest();
-    expect(User::count())->toBe(0);
+});
+
+it('rejects login when google email is outside allowed domain', function () {
+    config()->set('services.google.allowed_domain', 'iedagropivijay.edu.co');
+
+    User::create([
+        'name' => 'Externo',
+        'email' => 'externo@externo.edu.co',
+        'password' => null,
+        'role' => 'lector',
+    ]);
+
+    fakeGoogleUserResponse(makeGoogleUser(
+        id: 'google-sub-666',
+        email: 'externo@externo.edu.co',
+        verified: true,
+    ));
+
+    $response = $this->get(route('auth.google.callback'));
+
+    $response->assertRedirect();
+    expect($response->headers->get('Location'))->toContain('/admin/login');
+    $this->assertGuest();
 });
 
 function fakeGoogleUserResponse(SocialiteUser $user): void

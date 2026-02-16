@@ -27,7 +27,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'entities.manage' => 'Gestionar entidades',
             'users.manage' => 'Gestionar usuarios',
             'roles.manage' => 'Gestionar roles',
-            'whitelist.manage' => 'Gestionar lista blanca de Google',
         ];
 
         foreach ($permissions as $code => $description) {

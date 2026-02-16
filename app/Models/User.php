@@ -168,7 +168,6 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
                 'entities.manage',
                 'users.manage',
                 'roles.manage',
-                'whitelist.manage',
             ],
             'administrador' => [
                 'documents.view',
@@ -182,7 +181,6 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
                 'entities.manage',
                 'users.manage',
                 'roles.manage',
-                'whitelist.manage',
             ],
             'editor' => [
                 'documents.view',

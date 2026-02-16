@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\AllowedGoogleAccount;
-use App\Models\Role;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Http\RedirectResponse;
@@ -87,22 +85,20 @@ class GoogleAuthController extends Controller
             ->orWhere('email', $email)
             ->first();
 
-        $allowedAccount = AllowedGoogleAccount::query()
-            ->where('email', $email)
-            ->where('is_active', true)
-            ->first();
-
-        if ((! $allowedAccount) && (! $this->isPreProvisionedUser($user))) {
-            Log::notice('Google OAuth rejected by whitelist.', ['email' => $email]);
+        if (! $user) {
+            Log::notice('Google OAuth rejected because user is not pre-registered.', ['email' => $email]);
 
             return redirect()
                 ->to(Filament::getLoginUrl())
-                ->withErrors(['auth' => 'Tu cuenta no está autorizada para ingresar a SILO.']);
+                ->withErrors(['auth' => 'Tu cuenta no está registrada en SILO. Solicita acceso al administrador.']);
         }
 
-        if (! $user) {
-            $user = new User();
-            $user->password = null;
+        if (! $this->hasAccessRole($user)) {
+            Log::notice('Google OAuth rejected because user has no assigned role.', ['user_id' => $user->id, 'email' => $email]);
+
+            return redirect()
+                ->to(Filament::getLoginUrl())
+                ->withErrors(['auth' => 'Tu cuenta no tiene un rol asignado en SILO. Contacta al administrador.']);
         }
 
         $user->fill([
@@ -118,8 +114,6 @@ class GoogleAuthController extends Controller
         }
 
         $user->save();
-
-        $this->assignInitialRole($user, $allowedAccount);
 
         Auth::guard('web')->login($user, true);
         request()->session()->regenerate();
@@ -139,55 +133,8 @@ class GoogleAuthController extends Controller
         return redirect()->to(Filament::getLoginUrl());
     }
 
-    protected function assignInitialRole(User $user, ?AllowedGoogleAccount $allowedAccount): void
+    protected function hasAccessRole(User $user): bool
     {
-        if ($user->roles()->exists()) {
-            if (blank($user->role)) {
-                $user->role = $user->roles()->value('slug');
-                $user->saveQuietly();
-            }
-
-            return;
-        }
-
-        if ($allowedAccount === null) {
-            return;
-        }
-
-        $targetRoleSlug = $allowedAccount->default_role_slug ?: $this->mapLegacyRoleToSlug($user->role);
-
-        if (blank($targetRoleSlug)) {
-            return;
-        }
-
-        $role = Role::query()
-            ->where('slug', Str::lower((string) $targetRoleSlug))
-            ->first();
-
-        if ($role) {
-            $user->roles()->syncWithoutDetaching([$role->id]);
-            $user->role = $role->slug;
-            $user->saveQuietly();
-        }
-    }
-
-    protected function isPreProvisionedUser(?User $user): bool
-    {
-        if (! $user) {
-            return false;
-        }
-
         return $user->roles()->exists() || filled($user->role);
-    }
-
-    protected function mapLegacyRoleToSlug(?string $legacyRole): ?string
-    {
-        return match (Str::lower((string) $legacyRole)) {
-            'rector' => 'rector',
-            'administrador' => 'administrador',
-            'editor' => 'editor',
-            'docente', 'lector' => 'lector',
-            default => null,
-        };
     }
 }

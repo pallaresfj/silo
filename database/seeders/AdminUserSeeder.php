@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\AllowedGoogleAccount;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -28,14 +27,5 @@ class AdminUserSeeder extends Seeder
         if ($role) {
             $user->roles()->syncWithoutDetaching([$role->id]);
         }
-
-        AllowedGoogleAccount::query()->updateOrCreate(
-            ['email' => 'rectoria@iedagropivijay.edu.co'],
-            [
-                'default_role_slug' => 'rector',
-                'is_active' => true,
-                'notes' => 'Cuenta administrativa inicial',
-            ]
-        );
     }
 }
