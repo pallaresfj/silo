@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\GoogleProvider;
 
 class GoogleAuthController extends Controller
 {
@@ -31,7 +32,10 @@ class GoogleAuthController extends Controller
                 ->withErrors(['auth' => 'OAuth de Google no está configurado. Contacta al administrador.']);
         }
 
-        return Socialite::driver('google')
+        /** @var GoogleProvider $googleProvider */
+        $googleProvider = Socialite::driver('google');
+
+        return $googleProvider
             ->scopes(['openid', 'profile', 'email'])
             ->with([
                 'hd' => config('services.google.allowed_domain'),
