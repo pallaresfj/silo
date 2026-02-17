@@ -2,38 +2,34 @@
 
 namespace App\Filament\Auth;
 
-use Filament\Actions\Action;
 use Filament\Auth\Pages\Login as BaseLogin;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Illuminate\Contracts\Support\Htmlable;
 
 class Login extends BaseLogin
 {
+    protected string $view = 'filament.auth.login';
+
+    protected Width | string | null $maxWidth = Width::SevenExtraLarge;
+
     public function form(Schema $schema): Schema
     {
         return $schema->components([]);
     }
 
-    /**
-     * @return array<Action>
-     */
-    protected function getFormActions(): array
+    public function hasLogo(): bool
     {
-        return [
-            Action::make('google')
-                ->label('Entrar con Google')
-                ->icon('heroicon-o-arrow-right-on-rectangle')
-                ->url(route('auth.google.redirect')),
-        ];
+        return false;
     }
 
     public function getHeading(): string | Htmlable | null
     {
-        return 'Acceso institucional';
+        return null;
     }
 
     public function getSubheading(): string | Htmlable | null
     {
-        return 'Ingresa con tu cuenta de Google institucional para continuar.';
+        return null;
     }
 }

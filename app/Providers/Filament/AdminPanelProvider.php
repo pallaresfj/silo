@@ -2,9 +2,9 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Pages\EditProfile;
 use App\Filament\Pages\HomeDashboard;
 use App\Filament\Auth\Login;
+use App\Http\Middleware\EnsureIdpSessionIsAlive;
 use Filament\Enums\UserMenuPosition;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -29,7 +29,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login(Login::class)
-            ->profile(EditProfile::class, isSimple: false)
+            ->profile(null)
             ->userMenu(position: UserMenuPosition::Sidebar)
             ->colors([
                 'primary' => '#1d6362',
@@ -49,6 +49,7 @@ class AdminPanelProvider extends PanelProvider
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
                 AuthenticateSession::class,
+                EnsureIdpSessionIsAlive::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,
                 SubstituteBindings::class,

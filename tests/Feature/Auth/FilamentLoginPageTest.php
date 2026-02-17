@@ -1,13 +1,17 @@
 <?php
 
-it('renders google-only login page', function () {
+it('renders institutional sso login page', function () {
     $this->withoutVite();
 
     $response = $this->get('/admin/login');
 
     $response->assertStatus(200);
-    $response->assertSee('Entrar con Google');
-    $response->assertSee('/auth/google/redirect');
+    $response->assertSee('Cuenta Institucional');
+    $response->assertSee('/sso/login');
     $response->assertDontSee('name="data[email]"', false);
     $response->assertDontSee('name="data[password]"', false);
+});
+
+it('does not expose profile route in filament panel', function () {
+    $this->get('/admin/profile')->assertNotFound();
 });

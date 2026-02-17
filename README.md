@@ -64,3 +64,64 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## SSO con auth (OIDC)
+
+Variables requeridas en `.env`:
+
+```dotenv
+SSO_DISCOVERY_URL=http://localhost:8000/.well-known/openid-configuration
+SSO_ISSUER=http://localhost:8000
+SSO_CLIENT_ID=
+SSO_CLIENT_SECRET=
+SSO_REDIRECT_URI=http://localhost:8000/sso/callback
+SSO_SCOPES="openid email profile"
+SSO_HTTP_TIMEOUT=10
+SSO_FRONTCHANNEL_LOGOUT_CLIENT_KEY=silo
+SSO_FRONTCHANNEL_LOGOUT_SECRET=change-me-local-secret
+SSO_FRONTCHANNEL_LOGOUT_TTL_SECONDS=120
+SSO_FRONTCHANNEL_LOGOUT_NEXT_HOSTS=localhost,127.0.0.1,auth.iedagropivijay.edu.co,silo.iedagropivijay.edu.co
+```
+
+Validar discovery/JWKS:
+
+```bash
+curl -fsS "http://localhost:8000/.well-known/openid-configuration"
+curl -fsS "http://localhost:8000/oauth/jwks"
+```
+
+Rutas:
+
+- `GET /sso/login`
+- `GET /sso/callback`
+- `GET /sso/frontchannel-logout`
+
+Flujo:
+
+1. `/sso/login` crea `state` + `code_verifier` + `nonce` y redirige a `auth`.
+2. `/sso/callback` valida `state`, canjea `code`, valida `id_token` por JWKS y autentica guard local.
+
+Compatibilidad legacy:
+
+- `GET /auth/google/redirect` redirige a `/sso/login`
+- `GET /auth/google/callback` redirige a `/sso/login`
+
+Validaciones realizadas en callback:
+
+- `state` y `nonce`
+- `id_token` (`iss`, `aud`, `exp` y firma RS256 con JWKS)
+- `email`, `name`, `sub`
+- `is_active` (si viene desde `auth`)
+
+Provisioning local:
+
+- `User::updateOrCreate(['email' => ...], ['name' => ...])`
+- Se actualizan `google_subject`, `google_avatar_url`, `last_google_login_at`.
+
+Troubleshooting rápido:
+
+- `state mismatch`: limpiar sesión/cookies y reintentar.
+- `invalid issuer/audience`: revisar `SSO_ISSUER`, `SSO_CLIENT_ID`.
+- error de JWKS/discovery: verificar `http://localhost:8000/.well-known/openid-configuration`.
+- `missing email`: revisar scopes `openid email profile`.
+- vuelve a `/admin/login` después de autenticar: usar `SESSION_COOKIE` distinto al de `auth` (evita colisión en `localhost`).

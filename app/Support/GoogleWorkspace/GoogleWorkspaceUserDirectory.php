@@ -46,22 +46,21 @@ class GoogleWorkspaceUserDirectory implements WorkspaceUserDirectory
             throw new RuntimeException('Falta configurar GOOGLE_WORKSPACE_ADMIN_EMAIL.');
         }
 
-        $driveConfig = config('filesystems.disks.google');
-        $privateKey = config('services.google.workspace_private_key') ?: ($driveConfig['private_key'] ?? null);
+        $privateKey = config('services.google.workspace_private_key');
 
         if (! $privateKey) {
-            throw new RuntimeException('Falta configurar GOOGLE_WORKSPACE_PRIVATE_KEY (o GOOGLE_DRIVE_PRIVATE_KEY) para validar usuarios de Workspace.');
+            throw new RuntimeException('Falta configurar GOOGLE_DRIVE_PRIVATE_KEY para validar usuarios de Workspace.');
         }
 
         $client = new Client();
         $client->setScopes([Directory::ADMIN_DIRECTORY_USER_READONLY]);
         $client->setAuthConfig([
-            'type' => config('services.google.workspace_type') ?: ($driveConfig['type'] ?? 'service_account'),
-            'project_id' => config('services.google.workspace_project_id') ?: ($driveConfig['project_id'] ?? ''),
-            'private_key_id' => config('services.google.workspace_private_key_id') ?: ($driveConfig['private_key_id'] ?? ''),
+            'type' => config('services.google.workspace_type', 'service_account'),
+            'project_id' => config('services.google.workspace_project_id', ''),
+            'private_key_id' => config('services.google.workspace_private_key_id', ''),
             'private_key' => str_replace('\\n', "\n", $privateKey),
-            'client_email' => config('services.google.workspace_client_email') ?: ($driveConfig['client_email'] ?? ''),
-            'client_id' => config('services.google.workspace_client_id') ?: ($driveConfig['client_id'] ?? ''),
+            'client_email' => config('services.google.workspace_client_email', ''),
+            'client_id' => config('services.google.workspace_client_id', ''),
             'auth_uri' => 'https://accounts.google.com/o/oauth2/auth',
             'token_uri' => 'https://oauth2.googleapis.com/token',
         ]);

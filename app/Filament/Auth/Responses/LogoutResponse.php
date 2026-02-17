@@ -3,6 +3,7 @@
 namespace App\Filament\Auth\Responses;
 
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
+use Filament\Facades\Filament;
 use Illuminate\Http\RedirectResponse;
 use Livewire\Features\SupportRedirects\Redirector;
 
@@ -10,25 +11,44 @@ class LogoutResponse implements LogoutResponseContract
 {
     public function toResponse($request): RedirectResponse | Redirector
     {
-        $homeUrl = url('/');
+        $idpLogoutUrl = trim((string) config('sso.idp_logout_url', ''));
+        $fallbackUrl = url('/');
+        $continueUrl = $this->normalizeUrl(Filament::getLoginUrl()) ?? $fallbackUrl;
 
-        if (! (bool) config('services.google.logout_from_browser', false)) {
-            return redirect()->to($homeUrl);
+        if ($idpLogoutUrl === '') {
+            return redirect()->to($continueUrl);
         }
 
-        $host = (string) parse_url($homeUrl, PHP_URL_HOST);
-        $scheme = strtolower((string) parse_url($homeUrl, PHP_URL_SCHEME));
-        $isLocalHost = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+        $idpUrl = $this->appendQuery($idpLogoutUrl, [
+            'continue' => $continueUrl,
+            'source' => 'silo_filament',
+        ]);
 
-        // Avoid Google/AppEngine redirect warnings in local or non-HTTPS environments.
-        if ($isLocalHost || $scheme !== 'https') {
-            return redirect()->to($homeUrl);
+        return redirect()->away($idpUrl);
+    }
+
+    private function normalizeUrl(string $value): ?string
+    {
+        $trimmed = trim($value);
+
+        if ($trimmed === '') {
+            return null;
         }
 
-        // Best-effort Google account logout. This signs out Google account(s) in the browser.
-        $appEngineLogoutUrl = 'https://appengine.google.com/_ah/logout?continue=' . urlencode($homeUrl);
-        $googleLogoutUrl = 'https://accounts.google.com/Logout?continue=' . urlencode($appEngineLogoutUrl);
+        if (str_starts_with($trimmed, 'http://') || str_starts_with($trimmed, 'https://')) {
+            return $trimmed;
+        }
 
-        return redirect()->away($googleLogoutUrl);
+        return url($trimmed);
+    }
+
+    /**
+     * @param  array<string, string>  $params
+     */
+    private function appendQuery(string $url, array $params): string
+    {
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url.$separator.http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     }
 }
