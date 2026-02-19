@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class User extends Authenticatable implements FilamentUser, HasAvatar
@@ -76,11 +75,13 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
      */
     public function getFilamentAvatarUrl(): ?string
     {
-        if (filled($this->avatar_url)) {
-            return Storage::url((string) $this->avatar_url);
+        $googleAvatarUrl = trim((string) $this->google_avatar_url);
+
+        if ($googleAvatarUrl === '' || ! filter_var($googleAvatarUrl, FILTER_VALIDATE_URL)) {
+            return null;
         }
 
-        return $this->google_avatar_url;
+        return $googleAvatarUrl;
     }
 
     public function roles(): BelongsToMany

@@ -21,7 +21,7 @@ class LogoutResponse implements LogoutResponseContract
 
         $idpUrl = $this->appendQuery($idpLogoutUrl, [
             'continue' => $continueUrl,
-            'source' => 'silo_filament',
+            'source' => config('sso.frontchannel_logout_client_key', 'silo'),
         ]);
 
         return redirect()->away($idpUrl);

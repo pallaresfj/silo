@@ -10,11 +10,12 @@ Route::get('/', function () {
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/sso/login', [SsoController::class, 'login'])->name('sso.login');
-    Route::get('/sso/callback', [SsoController::class, 'callback'])->name('sso.callback');
 
     Route::redirect('/auth/google/redirect', '/sso/login')->name('auth.google.redirect');
     Route::redirect('/auth/google/callback', '/sso/login')->name('auth.google.callback');
 });
+
+Route::get('/sso/callback', [SsoController::class, 'callback'])->name('sso.callback');
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/sso/session-check/start', [SsoController::class, 'startSessionCheck'])->name('sso.session-check.start');

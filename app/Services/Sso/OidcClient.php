@@ -11,11 +11,19 @@ use RuntimeException;
 
 class OidcClient
 {
-    public function buildAuthorizationUrl(string $state, string $codeChallenge, string $nonce, ?string $prompt = null): string
+    public function buildAuthorizationUrl(
+        string $state,
+        string $codeChallenge,
+        string $nonce,
+        ?string $prompt = null,
+        ?string $redirectUri = null
+    ): string
     {
+        $redirectUri = $this->resolveRedirectUri($redirectUri);
+
         $params = [
             'client_id' => $this->clientId(),
-            'redirect_uri' => $this->redirectUri(),
+            'redirect_uri' => $redirectUri,
             'response_type' => 'code',
             'scope' => implode(' ', $this->scopes()),
             'state' => $state,
@@ -38,15 +46,17 @@ class OidcClient
     /**
      * @return array<string, mixed>
      */
-    public function exchangeCodeForTokens(string $code, string $codeVerifier): array
+    public function exchangeCodeForTokens(string $code, string $codeVerifier, ?string $redirectUri = null): array
     {
+        $redirectUri = $this->resolveRedirectUri($redirectUri);
+
         $response = Http::asForm()
             ->timeout($this->httpTimeout())
             ->post($this->tokenEndpoint(), [
                 'grant_type' => 'authorization_code',
                 'client_id' => $this->clientId(),
                 'client_secret' => $this->clientSecret(),
-                'redirect_uri' => $this->redirectUri(),
+                'redirect_uri' => $redirectUri,
                 'code' => $code,
                 'code_verifier' => $codeVerifier,
             ]);
@@ -254,6 +264,13 @@ class OidcClient
     private function redirectUri(): string
     {
         return (string) config('sso.redirect_uri', '');
+    }
+
+    private function resolveRedirectUri(?string $redirectUri): string
+    {
+        $resolved = trim((string) ($redirectUri ?? ''));
+
+        return $resolved !== '' ? $resolved : $this->redirectUri();
     }
 
     /**

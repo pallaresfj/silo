@@ -37,6 +37,8 @@ class SsoController extends Controller
 
     private const SESSION_CHECK_LAST_AT = 'sso.session_check.last_checked_at';
 
+    private const SESSION_CHECK_REDIRECT_URI = 'sso.session_check.redirect_uri';
+
     public function __construct(private readonly OidcClient $oidcClient)
     {
     }
@@ -59,6 +61,10 @@ class SsoController extends Controller
 
     public function callback(Request $request): RedirectResponse
     {
+        if (Auth::guard('web')->check() && ! $request->session()->has(self::LOGIN_STATE)) {
+            return redirect()->to(Filament::getUrl());
+        }
+
         if ($request->filled('error')) {
             return $this->fail('No se pudo completar la autenticación institucional.');
         }
@@ -104,7 +110,8 @@ class SsoController extends Controller
         $name = trim((string) ($claims['name'] ?? $email));
         $subject = trim((string) ($claims['sub'] ?? ''));
         $isActive = array_key_exists('is_active', $claims) ? (bool) $claims['is_active'] : true;
-        $avatar = trim((string) ($claims['picture'] ?? ''));
+        $avatarCandidate = trim((string) ($claims['picture'] ?? $claims['avatar'] ?? $claims['google_avatar_url'] ?? ''));
+        $googleAvatarUrl = filter_var($avatarCandidate, FILTER_VALIDATE_URL) ? $avatarCandidate : null;
 
         if ($email === '') {
             return $this->fail('No se recibió email en los claims.');
@@ -125,7 +132,7 @@ class SsoController extends Controller
             array_filter([
                 'name' => $name === '' ? $email : $name,
                 'google_subject' => $subject,
-                'google_avatar_url' => $avatar === '' ? null : $avatar,
+                'google_avatar_url' => $googleAvatarUrl,
                 'last_google_login_at' => now(),
                 'password' => $alreadyExists ? null : Hash::make(Str::password(40)),
                 'email_verified_at' => $alreadyExists ? null : now(),
@@ -149,6 +156,7 @@ class SsoController extends Controller
             return redirect()->to(Filament::getLoginUrl());
         }
 
+        $sessionCheckRedirectUri = $this->resolveSessionCheckRedirectUri();
         $state = Str::random(64);
         $nonce = Str::random(64);
         $codeVerifier = Str::random(96);
@@ -160,11 +168,18 @@ class SsoController extends Controller
             self::SESSION_CHECK_VERIFIER => $codeVerifier,
             self::SESSION_CHECK_IN_PROGRESS => true,
             self::SESSION_CHECK_STARTED_AT => now()->timestamp,
+            self::SESSION_CHECK_REDIRECT_URI => $sessionCheckRedirectUri,
         ]);
 
         $prompt = trim((string) config('sso.session_check_prompt', 'none'));
 
-        return redirect()->away($this->oidcClient->buildAuthorizationUrl($state, $codeChallenge, $nonce, $prompt));
+        return redirect()->away($this->oidcClient->buildAuthorizationUrl(
+            $state,
+            $codeChallenge,
+            $nonce,
+            $prompt,
+            $sessionCheckRedirectUri
+        ));
     }
 
     public function completeSessionCheck(Request $request): RedirectResponse
@@ -200,8 +215,14 @@ class SsoController extends Controller
             return $this->logoutForExpiredIdpSession($request);
         }
 
+        $sessionCheckRedirectUri = trim((string) $request->session()->get(self::SESSION_CHECK_REDIRECT_URI, ''));
+
+        if ($sessionCheckRedirectUri === '') {
+            $sessionCheckRedirectUri = $this->resolveSessionCheckRedirectUri();
+        }
+
         try {
-            $tokens = $this->oidcClient->exchangeCodeForTokens($code, $codeVerifier);
+            $tokens = $this->oidcClient->exchangeCodeForTokens($code, $codeVerifier, $sessionCheckRedirectUri);
             $idToken = (string) ($tokens['id_token'] ?? '');
 
             if ($idToken === '') {
@@ -247,14 +268,15 @@ class SsoController extends Controller
         }
 
         $name = trim((string) ($claims['name'] ?? ''));
-        $avatar = trim((string) ($claims['picture'] ?? ''));
+        $avatarCandidate = trim((string) ($claims['picture'] ?? $claims['avatar'] ?? $claims['google_avatar_url'] ?? ''));
+        $googleAvatarUrl = filter_var($avatarCandidate, FILTER_VALIDATE_URL) ? $avatarCandidate : null;
 
         if ($name !== '') {
             $user->name = $name;
         }
 
-        if ($avatar !== '') {
-            $user->google_avatar_url = $avatar;
+        if ($googleAvatarUrl !== null) {
+            $user->google_avatar_url = $googleAvatarUrl;
         }
 
         $user->last_google_login_at = now();
@@ -351,6 +373,13 @@ class SsoController extends Controller
         return $returnTo !== '' ? $returnTo : null;
     }
 
+    private function resolveSessionCheckRedirectUri(): string
+    {
+        $configured = trim((string) config('sso.session_check_redirect_uri', ''));
+
+        return $configured !== '' ? $configured : url('/sso/session-check/callback');
+    }
+
     private function clearSessionCheckState(Request $request): void
     {
         $request->session()->forget([
@@ -360,6 +389,7 @@ class SsoController extends Controller
             self::SESSION_CHECK_NONCE,
             self::SESSION_CHECK_VERIFIER,
             self::SESSION_CHECK_RETURN_TO,
+            self::SESSION_CHECK_REDIRECT_URI,
         ]);
     }
 
