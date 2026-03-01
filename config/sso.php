@@ -7,8 +7,8 @@ $csv = static fn (string $value): array => array_values(array_filter(array_map(
 )));
 
 return [
-    'discovery_url' => env('SSO_DISCOVERY_URL', 'http://localhost:9000/.well-known/openid-configuration'),
-    'issuer' => env('SSO_ISSUER', 'http://localhost:9000'),
+    'discovery_url' => env('SSO_DISCOVERY_URL', 'https://auth.sharedwithexpose.com/.well-known/openid-configuration'),
+    'issuer' => env('SSO_ISSUER', 'https://auth.sharedwithexpose.com'),
     'client_id' => env('SSO_CLIENT_ID', ''),
     'client_secret' => env('SSO_CLIENT_SECRET', ''),
     'redirect_uri' => env('SSO_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/sso/callback'),
@@ -18,13 +18,13 @@ return [
     'session_check_interval_seconds' => (int) env('SSO_SESSION_CHECK_INTERVAL_SECONDS', 60),
     'session_check_prompt' => env('SSO_SESSION_CHECK_PROMPT', 'none'),
     'session_check_redirect_uri' => env('SSO_SESSION_CHECK_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/sso/session-check/callback'),
-    'idp_logout_url' => env('SSO_IDP_LOGOUT_URL', 'http://localhost:9000/logout'),
+    'idp_logout_url' => env('SSO_IDP_LOGOUT_URL', 'https://auth.sharedwithexpose.com/logout'),
     'frontchannel_logout_client_key' => mb_strtolower(trim((string) env('SSO_FRONTCHANNEL_LOGOUT_CLIENT_KEY', 'silo'))),
     'frontchannel_logout_secret' => (string) env('SSO_FRONTCHANNEL_LOGOUT_SECRET', ''),
     'frontchannel_logout_ttl_seconds' => (int) env('SSO_FRONTCHANNEL_LOGOUT_TTL_SECONDS', 120),
     'frontchannel_logout_next_hosts' => $csv(env(
         'SSO_FRONTCHANNEL_LOGOUT_NEXT_HOSTS',
-        'localhost,127.0.0.1,auth.iedagropivijay.edu.co,silo.iedagropivijay.edu.co,accounts.google.com,appengine.google.com'
+        'localhost,127.0.0.1,auth.sharedwithexpose.com,silo.sharedwithexpose.com,auth.iedagropivijay.edu.co,silo.iedagropivijay.edu.co,accounts.google.com,appengine.google.com'
     )),
     'http_timeout' => (int) env('SSO_HTTP_TIMEOUT', 10),
     'discovery_cache_seconds' => (int) env('SSO_DISCOVERY_CACHE_SECONDS', 3600),

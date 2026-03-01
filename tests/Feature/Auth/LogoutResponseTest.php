@@ -22,6 +22,6 @@ it('redirects filament logout to auth logout with continue and source', function
 
     parse_str((string) ($parts['query'] ?? ''), $query);
 
-    expect($query['source'] ?? null)->toBe('silo_filament');
+    expect($query['source'] ?? null)->toBe('silo');
     expect($query['continue'] ?? null)->toContain('/admin/login');
 });
