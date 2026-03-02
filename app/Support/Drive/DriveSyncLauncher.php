@@ -70,13 +70,25 @@ class DriveSyncLauncher
         try {
             $shellCommand = $this->buildDetachedShellCommand($runId, $bootstrap, $triggeredBy, $logPath);
             $result = Process::path(base_path())
-                ->run(['sh', '-lc', $shellCommand]);
+                ->run(['sh', '-c', $shellCommand]);
 
             if ($result->failed()) {
                 throw new RuntimeException(trim($result->errorOutput()) ?: 'No se pudo lanzar el proceso de sincronización en segundo plano.');
             }
 
+            $state
+                ->putExecutionMetadata([
+                    'launcher_output' => trim($result->output()),
+                    'launcher_error' => trim($result->errorOutput()),
+                ])
+                ->save();
+
             $pid = $this->extractPid($result->output());
+
+            if ($pid === null) {
+                usleep(250000);
+                $pid = $this->resolvePidFromProcessList($runId);
+            }
 
             if ($pid === null) {
                 throw new RuntimeException('El lanzador no devolvió un PID válido para la sincronización en segundo plano.');
@@ -233,7 +245,7 @@ class DriveSyncLauncher
         $innerCommand = implode(' ', $parts);
 
         return sprintf(
-            'nohup %s >> %s 2>&1 & echo $!',
+            'nohup %s >> %s 2>&1 < /dev/null & printf "%%s\n" "$!"',
             $innerCommand,
             escapeshellarg($logPath),
         );
@@ -241,9 +253,13 @@ class DriveSyncLauncher
 
     protected function extractPid(string $output): ?int
     {
-        $pid = trim($output);
+        if (preg_match_all('/\b(\d+)\b/', $output, $matches) !== 1) {
+            return null;
+        }
 
-        if (! preg_match('/^\d+$/', $pid)) {
+        $pid = end($matches[1]);
+
+        if (! is_string($pid) || $pid === '') {
             return null;
         }
 
@@ -259,5 +275,23 @@ class DriveSyncLauncher
         }
 
         return rtrim($home, '/') . $suffix;
+    }
+
+    protected function resolvePidFromProcessList(string $runId): ?int
+    {
+        $needle = 'drive:sync-unclassified --run-id=' . $runId;
+        $command = sprintf(
+            "ps -eo pid=,command= | grep %s | grep -v grep | tail -n 1 | awk '{print \$1}'",
+            escapeshellarg($needle),
+        );
+
+        $result = Process::path(base_path())
+            ->run(['sh', '-c', $command]);
+
+        if ($result->failed()) {
+            return null;
+        }
+
+        return $this->extractPid($result->output());
     }
 }
