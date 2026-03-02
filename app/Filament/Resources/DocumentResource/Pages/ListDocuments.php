@@ -15,12 +15,17 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Artisan;
 use Throwable;
 
 class ListDocuments extends ListRecords
 {
     protected static string $resource = DocumentResource::class;
+
+    public int $lastObservedDriveSyncImportedTotal = 0;
+
+    public int $lastObservedDriveSyncProcessedTotal = 0;
 
     protected function getHeaderActions(): array
     {
@@ -153,6 +158,20 @@ class ListDocuments extends ListRecords
         return parent::table($table)
             ->poll(fn (): ?string => $this->canUseDriveTools() && $this->isDriveSyncActive() ? '2s' : null)
             ->description(fn (): ?string => $this->getDriveSyncBanner());
+    }
+
+    public function refreshDriveSyncProgress(): void
+    {
+        $execution = $this->getDriveSyncExecution();
+        $summary = is_array($execution['summary'] ?? null) ? $execution['summary'] : [];
+        $importedTotal = (int) ($summary['imported_total'] ?? 0);
+        $processedTotal = (int) ($execution['items_processed'] ?? 0);
+
+        if ($importedTotal > $this->lastObservedDriveSyncImportedTotal || $processedTotal > $this->lastObservedDriveSyncProcessedTotal) {
+            $this->lastObservedDriveSyncImportedTotal = $importedTotal;
+            $this->lastObservedDriveSyncProcessedTotal = $processedTotal;
+            $this->resetPage();
+        }
     }
 
     /**
@@ -293,7 +312,7 @@ class ListDocuments extends ListRecords
         };
     }
 
-    protected function getDriveSyncBanner(): ?string
+    protected function getDriveSyncBanner(): string|HtmlString|null
     {
         $execution = $this->getDriveSyncExecution();
 
@@ -309,7 +328,7 @@ class ListDocuments extends ListRecords
         );
 
         if ($status === DriveSyncState::EXECUTION_STATUS_QUEUED) {
-            return 'Sincronización de externos en cola. El proceso quedó programado en segundo plano.';
+            return $this->renderDriveSyncBanner('Sincronización de externos en cola. El proceso quedó programado en segundo plano.');
         }
 
         if ($status === DriveSyncState::EXECUTION_STATUS_RUNNING) {
@@ -324,25 +343,39 @@ class ListDocuments extends ListRecords
 
             $parts[] = 'Modo: ' . $this->formatModeLabel($execution['mode'] ?? null) . '.';
 
-            return implode(' ', $parts);
+            return $this->renderDriveSyncBanner(implode(' ', $parts));
         }
 
         if ($status === DriveSyncState::EXECUTION_STATUS_FAILED) {
             $message = trim((string) ($execution['last_error'] ?? 'La ejecución dejó de reportar progreso. Puedes reintentar la sincronización.'));
 
-            return 'La última sincronización externa falló. ' . $message;
+            return $this->renderDriveSyncBanner('La última sincronización externa falló. ' . $message);
         }
 
         if ($status === DriveSyncState::EXECUTION_STATUS_COMPLETED) {
-            return sprintf(
+            return $this->renderDriveSyncBanner(sprintf(
                 'Última sincronización externa completada. Importados: %d. Sin clasificar: %d. Errores: %d.',
                 (int) ($summary['imported_total'] ?? 0),
                 (int) ($summary['imported_unclassified'] ?? 0),
                 (int) ($summary['errors'] ?? 0),
-            );
+            ));
         }
 
         return null;
+    }
+
+    protected function renderDriveSyncBanner(string $message): string|HtmlString
+    {
+        $escapedMessage = e($message);
+
+        if (! $this->isDriveSyncActive()) {
+            return $escapedMessage;
+        }
+
+        return new HtmlString(
+            $escapedMessage
+            . '<div class="hidden" wire:poll.2s="refreshDriveSyncProgress" aria-hidden="true"></div>'
+        );
     }
 
     protected function getDriveSyncStatusBody(): string
