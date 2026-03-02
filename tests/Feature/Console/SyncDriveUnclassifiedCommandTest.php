@@ -61,7 +61,7 @@ it('imports orphan files during bootstrap without duplicating existing records',
         ],
     ));
 
-    $summary = app(DriveUnclassifiedSyncService::class)->sync(true);
+    $summary = app(DriveUnclassifiedSyncService::class)->sync(true, 'run-bootstrap', 'Administrador');
 
     expect($summary['mode'])->toBe('bootstrap');
     expect($summary['imported_total'])->toBe(1);
@@ -75,6 +75,14 @@ it('imports orphan files during bootstrap without duplicating existing records',
 
     $state = DriveSyncState::query()->where('key', 'documents_root')->firstOrFail();
     expect($state->last_start_page_token)->toBe('token-bootstrap');
+    expect($state->getExecutionMetadata())->toMatchArray([
+        'run_id' => 'run-bootstrap',
+        'status' => DriveSyncState::EXECUTION_STATUS_COMPLETED,
+        'requested_by' => 'Administrador',
+        'mode' => 'bootstrap',
+        'items_total' => 2,
+        'items_processed' => 2,
+    ]);
 });
 
 it('processes incremental changes and skips non-importable records', function () {
@@ -217,7 +225,7 @@ it('processes incremental changes and skips non-importable records', function ()
         ],
     ));
 
-    $summary = app(DriveUnclassifiedSyncService::class)->sync();
+    $summary = app(DriveUnclassifiedSyncService::class)->sync(false, 'run-incremental', 'Administrador');
 
     expect($summary['mode'])->toBe('incremental');
     expect($summary['imported_total'])->toBe(1);
@@ -231,6 +239,14 @@ it('processes incremental changes and skips non-importable records', function ()
 
     $state = DriveSyncState::query()->where('key', 'documents_root')->firstOrFail();
     expect($state->last_start_page_token)->toBe('token-new');
+    expect($state->getExecutionMetadata())->toMatchArray([
+        'run_id' => 'run-incremental',
+        'status' => DriveSyncState::EXECUTION_STATUS_COMPLETED,
+        'requested_by' => 'Administrador',
+        'mode' => 'incremental',
+        'items_total' => 6,
+        'items_processed' => 6,
+    ]);
 });
 
 it('imports institutional files using the institutional scope and created time year', function () {

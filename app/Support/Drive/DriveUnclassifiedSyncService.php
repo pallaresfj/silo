@@ -10,10 +10,13 @@ use App\Support\Drive\Contracts\DriveSyncGateway;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 
 class DriveUnclassifiedSyncService
 {
     public const STATE_KEY = 'documents_root';
+
+    protected const EXECUTION_HEARTBEAT_EVERY = 5;
 
     /**
      * @var array<string, string|null>
@@ -43,7 +46,7 @@ class DriveUnclassifiedSyncService
      *  sample_items: list<array{title: string, path: string, status: string, url: string|null}>
      * }
      */
-    public function sync(bool $forceBootstrap = false): array
+    public function sync(bool $forceBootstrap = false, ?string $runId = null, ?string $triggeredBy = null): array
     {
         $summary = [
             'mode' => 'incremental',
@@ -56,94 +59,128 @@ class DriveUnclassifiedSyncService
             'sample_items' => [],
         ];
 
+        $runId ??= (string) Str::uuid();
+        $state = DriveSyncState::query()->firstOrNew(['key' => static::STATE_KEY]);
+
+        $processedItems = 0;
+        $itemsTotal = null;
         $rootFolderId = (string) config('filesystems.disks.google.folder');
 
-        if (trim($rootFolderId) === '') {
-            throw new \RuntimeException('GOOGLE_DRIVE_FOLDER_ID is not configured.');
-        }
-
-        $rootMeta = $this->gateway->getRootMetadata($rootFolderId);
-        $driveId = $rootMeta['driveId'];
-
-        $state = DriveSyncState::query()->firstOrNew(['key' => static::STATE_KEY]);
-        $state->root_folder_id = $rootFolderId;
-        $state->shared_drive_id = $driveId;
-
-        $lastStartToken = trim((string) $state->last_start_page_token);
-        $bootstrapOnEmpty = (bool) config('drive_sync.bootstrap_on_empty_state', true);
-
-        $shouldBootstrap = $forceBootstrap || ($lastStartToken === '' && $bootstrapOnEmpty);
-
-        if ($shouldBootstrap) {
-            $summary['mode'] = 'bootstrap';
-            $files = $this->gateway->allFilesRecursively($rootFolderId);
-
-            foreach ($files as $file) {
-                try {
-                    $this->importFile($file, (string) ($file['path'] ?? '/'), $summary);
-                } catch (\Throwable $e) {
-                    $summary['errors']++;
-                    Log::warning('Drive bootstrap import failed', [
-                        'file_id' => $file['id'] ?? null,
-                        'path' => $file['path'] ?? null,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
+        try {
+            if (trim($rootFolderId) === '') {
+                throw new \RuntimeException('GOOGLE_DRIVE_FOLDER_ID is not configured.');
             }
 
-            $state->last_start_page_token = $this->gateway->getStartPageToken($driveId);
-        } elseif ($lastStartToken === '') {
-            $summary['mode'] = 'token-initialized';
-            $state->last_start_page_token = $this->gateway->getStartPageToken($driveId);
-        } else {
-            $changesPayload = $this->gateway->allChangesSince($lastStartToken, $driveId);
-            $changes = $changesPayload['changes'];
-            $summary['mode'] = 'incremental';
+            $rootMeta = $this->gateway->getRootMetadata($rootFolderId);
+            $driveId = $rootMeta['driveId'];
 
-            foreach ($changes as $change) {
-                if (($change['removed'] ?? false) === true) {
-                    continue;
+            $state->root_folder_id = $rootFolderId;
+            $state->shared_drive_id = $driveId;
+
+            $lastStartToken = trim((string) $state->last_start_page_token);
+            $bootstrapOnEmpty = (bool) config('drive_sync.bootstrap_on_empty_state', true);
+
+            $shouldBootstrap = $forceBootstrap || ($lastStartToken === '' && $bootstrapOnEmpty);
+            $summary['mode'] = $shouldBootstrap ? 'bootstrap' : ($lastStartToken === '' ? 'token-initialized' : 'incremental');
+
+            $this->markExecutionRunning(
+                state: $state,
+                summary: $summary,
+                runId: $runId,
+                triggeredBy: $triggeredBy,
+                bootstrap: $shouldBootstrap,
+                itemsTotal: null,
+                itemsProcessed: 0,
+            );
+
+            if ($shouldBootstrap) {
+                $files = $this->gateway->allFilesRecursively($rootFolderId);
+                $itemsTotal = is_countable($files) ? count($files) : null;
+
+                $this->updateExecutionProgress($state, $summary, $runId, $shouldBootstrap, $processedItems, $itemsTotal, true);
+
+                foreach ($files as $file) {
+                    $processedItems++;
+
+                    try {
+                        $this->importFile($file, (string) ($file['path'] ?? '/'), $summary);
+                    } catch (\Throwable $e) {
+                        $summary['errors']++;
+                        Log::warning('Drive bootstrap import failed', [
+                            'file_id' => $file['id'] ?? null,
+                            'path' => $file['path'] ?? null,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+
+                    $this->updateExecutionProgress($state, $summary, $runId, $shouldBootstrap, $processedItems, $itemsTotal);
                 }
 
-                $file = $change['file'] ?? null;
+                $state->last_start_page_token = $this->gateway->getStartPageToken($driveId);
+            } elseif ($lastStartToken === '') {
+                $state->last_start_page_token = $this->gateway->getStartPageToken($driveId);
+                $this->updateExecutionProgress($state, $summary, $runId, false, 0, 0, true);
+            } else {
+                $changesPayload = $this->gateway->allChangesSince($lastStartToken, $driveId);
+                $changes = $changesPayload['changes'];
+                $itemsTotal = is_countable($changes) ? count($changes) : null;
 
-                if (! is_array($file)) {
-                    continue;
-                }
+                $this->updateExecutionProgress($state, $summary, $runId, false, $processedItems, $itemsTotal, true);
 
-                if (! $this->isImportableFile($file)) {
-                    continue;
-                }
+                foreach ($changes as $change) {
+                    $processedItems++;
 
-                try {
-                    $relativePath = $this->resolveRelativePathFromFile($file, $rootFolderId);
-
-                    if ($relativePath === null) {
-                        $summary['skipped_outside_root']++;
+                    if (($change['removed'] ?? false) === true) {
+                        $this->updateExecutionProgress($state, $summary, $runId, false, $processedItems, $itemsTotal);
                         continue;
                     }
 
-                    $this->importFile($file, $relativePath, $summary);
-                } catch (\Throwable $e) {
-                    $summary['errors']++;
-                    Log::warning('Drive incremental import failed', [
-                        'file_id' => $file['id'] ?? null,
-                        'error' => $e->getMessage(),
-                    ]);
+                    $file = $change['file'] ?? null;
+
+                    if (! is_array($file)) {
+                        $this->updateExecutionProgress($state, $summary, $runId, false, $processedItems, $itemsTotal);
+                        continue;
+                    }
+
+                    if (! $this->isImportableFile($file)) {
+                        $this->updateExecutionProgress($state, $summary, $runId, false, $processedItems, $itemsTotal);
+                        continue;
+                    }
+
+                    try {
+                        $relativePath = $this->resolveRelativePathFromFile($file, $rootFolderId);
+
+                        if ($relativePath === null) {
+                            $summary['skipped_outside_root']++;
+                            $this->updateExecutionProgress($state, $summary, $runId, false, $processedItems, $itemsTotal);
+                            continue;
+                        }
+
+                        $this->importFile($file, $relativePath, $summary);
+                    } catch (\Throwable $e) {
+                        $summary['errors']++;
+                        Log::warning('Drive incremental import failed', [
+                            'file_id' => $file['id'] ?? null,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+
+                    $this->updateExecutionProgress($state, $summary, $runId, false, $processedItems, $itemsTotal);
                 }
+
+                $state->last_start_page_token = $changesPayload['newStartPageToken'] ?: $lastStartToken;
             }
 
-            $state->last_start_page_token = $changesPayload['newStartPageToken'] ?: $lastStartToken;
-        }
+            $state->last_synced_at = now();
+            $this->persistSummaryMetadata($state, $summary);
+            $this->markExecutionCompleted($state, $summary, $runId, $shouldBootstrap, $processedItems, $itemsTotal);
+        } catch (\Throwable $e) {
+            $summary['errors']++;
+            $this->persistSummaryMetadata($state, $summary);
+            $this->markExecutionFailed($state, $summary, $runId, $processedItems, $itemsTotal, $e->getMessage());
 
-        $state->last_synced_at = now();
-        $state->metadata = [
-            'last_mode' => $summary['mode'],
-            'imported_total' => $summary['imported_total'],
-            'imported_unclassified' => $summary['imported_unclassified'],
-            'errors' => $summary['errors'],
-        ];
-        $state->save();
+            throw $e;
+        }
 
         if ((bool) config('drive_sync.notify', true) && $summary['imported_unclassified'] > 0) {
             $summary['notified_recipients'] = $this->notifyUnclassifiedDetected($summary);
@@ -387,5 +424,160 @@ class DriveUnclassifiedSyncService
         ]);
 
         return "{$baseUrl}?{$query}";
+    }
+
+    /**
+     * @param  array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}  $summary
+     */
+    protected function persistSummaryMetadata(DriveSyncState $state, array $summary): void
+    {
+        $metadata = $state->metadata ?? [];
+        $metadata['last_mode'] = $summary['mode'];
+        $metadata['imported_total'] = $summary['imported_total'];
+        $metadata['imported_unclassified'] = $summary['imported_unclassified'];
+        $metadata['skipped_existing'] = $summary['skipped_existing'];
+        $metadata['skipped_outside_root'] = $summary['skipped_outside_root'];
+        $metadata['errors'] = $summary['errors'];
+        $state->metadata = $metadata;
+    }
+
+    /**
+     * @param  array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}  $summary
+     */
+    protected function markExecutionRunning(
+        DriveSyncState $state,
+        array $summary,
+        string $runId,
+        ?string $triggeredBy,
+        bool $bootstrap,
+        ?int $itemsTotal,
+        int $itemsProcessed,
+    ): void {
+        $execution = $state->getExecutionMetadata();
+        $startedAt = now()->toIso8601String();
+
+        $state
+            ->putExecutionMetadata([
+                'run_id' => $runId,
+                'status' => DriveSyncState::EXECUTION_STATUS_RUNNING,
+                'bootstrap' => $bootstrap,
+                'mode' => $summary['mode'],
+                'requested_at' => $execution['requested_at'] ?? $startedAt,
+                'requested_by' => $execution['requested_by'] ?? $triggeredBy ?? 'system',
+                'started_at' => $startedAt,
+                'finished_at' => null,
+                'heartbeat_at' => $startedAt,
+                'items_total' => $itemsTotal,
+                'items_processed' => $itemsProcessed,
+                'summary' => $this->executionSummary($summary),
+                'last_error' => null,
+            ])
+            ->save();
+    }
+
+    /**
+     * @param  array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}  $summary
+     */
+    protected function updateExecutionProgress(
+        DriveSyncState $state,
+        array $summary,
+        string $runId,
+        bool $bootstrap,
+        int $itemsProcessed,
+        ?int $itemsTotal,
+        bool $force = false,
+    ): void {
+        if (! $force && ($itemsProcessed % static::EXECUTION_HEARTBEAT_EVERY) !== 0) {
+            return;
+        }
+
+        $state
+            ->putExecutionMetadata([
+                'run_id' => $runId,
+                'status' => DriveSyncState::EXECUTION_STATUS_RUNNING,
+                'bootstrap' => $bootstrap,
+                'mode' => $summary['mode'],
+                'heartbeat_at' => now()->toIso8601String(),
+                'items_total' => $itemsTotal,
+                'items_processed' => $itemsProcessed,
+                'summary' => $this->executionSummary($summary),
+            ])
+            ->save();
+
+        if (function_exists('gc_collect_cycles')) {
+            gc_collect_cycles();
+        }
+    }
+
+    /**
+     * @param  array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}  $summary
+     */
+    protected function markExecutionCompleted(
+        DriveSyncState $state,
+        array $summary,
+        string $runId,
+        bool $bootstrap,
+        int $itemsProcessed,
+        ?int $itemsTotal,
+    ): void {
+        $finishedAt = now()->toIso8601String();
+
+        $state
+            ->putExecutionMetadata([
+                'run_id' => $runId,
+                'status' => DriveSyncState::EXECUTION_STATUS_COMPLETED,
+                'bootstrap' => $bootstrap,
+                'mode' => $summary['mode'],
+                'finished_at' => $finishedAt,
+                'heartbeat_at' => $finishedAt,
+                'items_total' => $itemsTotal ?? $itemsProcessed,
+                'items_processed' => $itemsProcessed,
+                'summary' => $this->executionSummary($summary),
+                'last_error' => null,
+            ])
+            ->save();
+    }
+
+    /**
+     * @param  array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}  $summary
+     */
+    protected function markExecutionFailed(
+        DriveSyncState $state,
+        array $summary,
+        string $runId,
+        int $itemsProcessed,
+        ?int $itemsTotal,
+        string $message,
+    ): void {
+        $finishedAt = now()->toIso8601String();
+
+        $state
+            ->putExecutionMetadata([
+                'run_id' => $runId,
+                'status' => DriveSyncState::EXECUTION_STATUS_FAILED,
+                'finished_at' => $finishedAt,
+                'heartbeat_at' => $finishedAt,
+                'items_total' => $itemsTotal,
+                'items_processed' => $itemsProcessed,
+                'summary' => $this->executionSummary($summary),
+                'last_error' => $message,
+            ])
+            ->save();
+    }
+
+    /**
+     * @param  array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}  $summary
+     * @return array{mode: string, imported_total: int, imported_unclassified: int, skipped_existing: int, skipped_outside_root: int, errors: int}
+     */
+    protected function executionSummary(array $summary): array
+    {
+        return [
+            'mode' => $summary['mode'],
+            'imported_total' => $summary['imported_total'],
+            'imported_unclassified' => $summary['imported_unclassified'],
+            'skipped_existing' => $summary['skipped_existing'],
+            'skipped_outside_root' => $summary['skipped_outside_root'],
+            'errors' => $summary['errors'],
+        ];
     }
 }

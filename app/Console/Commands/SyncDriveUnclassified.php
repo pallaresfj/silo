@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Cache;
 class SyncDriveUnclassified extends Command
 {
     protected $signature = 'drive:sync-unclassified
-        {--bootstrap : Ejecuta un escaneo completo recursivo antes de iniciar el modo incremental}';
+        {--bootstrap : Ejecuta un escaneo completo recursivo antes de iniciar el modo incremental}
+        {--run-id= : Identificador de ejecucion en segundo plano}
+        {--triggered-by= : Usuario que disparo la sincronizacion}';
 
     protected $description = 'Sincroniza archivos creados fuera de SILO y los importa para clasificacion.';
 
@@ -21,6 +23,10 @@ class SyncDriveUnclassified extends Command
 
     public function handle(): int
     {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
         if (! (bool) config('drive_sync.enabled', true)) {
             $this->info('DRIVE_SYNC_ENABLED=false. Sincronizacion omitida.');
 
@@ -37,7 +43,11 @@ class SyncDriveUnclassified extends Command
         }
 
         try {
-            $summary = $this->syncService->sync($bootstrap);
+            $summary = $this->syncService->sync(
+                forceBootstrap: $bootstrap,
+                runId: $this->option('run-id') ?: null,
+                triggeredBy: $this->option('triggered-by') ?: null,
+            );
         } catch (LockTimeoutException $e) {
             $this->error('No se pudo obtener lock de sincronizacion: ' . $e->getMessage());
 
