@@ -220,4 +220,24 @@ class DriveImportClassifierTest extends TestCase
         $this->assertSame((string) $entity->id, $result->entityId);
         $this->assertSame('high', $result->confidence);
     }
+
+    public function test_it_accepts_historical_yearly_paths_from_1900_onwards(): void
+    {
+        $category = DocumentCategory::query()->create([
+            'name' => 'Actas',
+            'slug' => 'actas',
+            'color' => '#3B82F6',
+        ]);
+
+        $classifier = app(DriveImportClassifier::class);
+
+        $result = $classifier->classify('/1905/ACTAS/libro.pdf', [
+            'name' => 'libro.pdf',
+        ]);
+
+        $this->assertSame(Document::STORAGE_SCOPE_YEARLY, $result->storageScope);
+        $this->assertSame(1905, $result->year);
+        $this->assertSame((string) $category->id, $result->categoryId);
+        $this->assertSame('high', $result->confidence);
+    }
 }

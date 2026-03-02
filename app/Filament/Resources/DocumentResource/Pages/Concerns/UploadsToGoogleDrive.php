@@ -277,7 +277,7 @@ trait UploadsToGoogleDrive
     ): DocumentDriveDestination {
         return new DocumentDriveDestination(
             storageScope: $this->getStorageScope($storageScope),
-            year: max(2010, (int) ($year ?? now()->year)),
+            year: max(1900, (int) ($year ?? now()->year)),
             categorySlug: $categorySlug,
             entityFolder: $entityFolder,
         );

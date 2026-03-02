@@ -249,7 +249,7 @@ class DocumentResource extends Resource
                                 }
                             })
                             ->required()
-                            ->minValue(2010)
+                            ->minValue(1900)
                             ->maxValue(2099),
 
                         Select::make('status')

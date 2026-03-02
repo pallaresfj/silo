@@ -156,7 +156,7 @@ class DriveImportClassifier
     protected function isValidYearSegment(string $yearSegment): bool
     {
         return preg_match('/^\d{4}$/', $yearSegment) === 1
-            && (int) $yearSegment >= 2010
+            && (int) $yearSegment >= 1900
             && (int) $yearSegment <= 2099;
     }
 
@@ -174,7 +174,7 @@ class DriveImportClassifier
             return null;
         }
 
-        return $year >= 2010 && $year <= 2099 ? $year : null;
+        return $year >= 1900 && $year <= 2099 ? $year : null;
     }
 
     protected function resolveFallbackCategoryId(): string
