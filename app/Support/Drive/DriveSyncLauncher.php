@@ -173,7 +173,7 @@ class DriveSyncLauncher
 
     protected function resolvePhpBinary(): string
     {
-        $configuredBinary = trim((string) env('PHP_CLI_BINARY', ''));
+        $configuredBinary = trim((string) config('drive_sync.php_cli_binary', ''));
 
         if ($configuredBinary !== '' && is_executable($configuredBinary)) {
             return $configuredBinary;
