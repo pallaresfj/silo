@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\DocumentResource\Pages\Concerns;
 
+use App\Models\Document;
 use App\Models\DocumentCategory;
 use App\Models\Entity;
+use App\Support\Drive\DocumentDriveDestination;
 use App\Support\GoogleDriveHelper;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Drive\DriveFile;
@@ -35,7 +37,7 @@ trait UploadsToGoogleDrive
 
     /**
      * Upload a file to Google Drive using the API with Shared Drive support.
-     * Creates folder structure {Year}/{Category} automatically.
+     * Creates the configured destination structure automatically.
      *
      * @return array{id: string, webViewLink: string}|null
      */
@@ -43,15 +45,13 @@ trait UploadsToGoogleDrive
         string $fileName,
         string $fileContents,
         string $mimeType,
-        int|string $year,
-        string $categorySlug,
-        ?string $entityFolder
+        DocumentDriveDestination $destination,
     ): ?array {
         $rootFolderId = config('filesystems.disks.google.folder');
 
         try {
             $service = GoogleDriveHelper::makeService();
-            $targetFolderId = GoogleDriveHelper::ensureDocumentFolder($year, $categorySlug, $entityFolder);
+            $targetFolderId = GoogleDriveHelper::ensureDocumentFolderForDestination($destination);
 
             // Create file metadata
             $fileMetadata = new DriveFile([
@@ -71,7 +71,7 @@ trait UploadsToGoogleDrive
             Log::info('File uploaded to Google Drive', [
                 'fileName' => $fileName,
                 'driveId' => $file->getId(),
-                'folder' => $this->buildFolderLogPath($year, $categorySlug, $entityFolder),
+                'folder' => $this->buildFolderLogPath($destination),
             ]);
 
             return [
@@ -110,15 +110,13 @@ trait UploadsToGoogleDrive
     protected function createNativeDocumentInGoogleDrive(
         string $title,
         string $nativeType,
-        int|string $year,
-        string $categorySlug,
-        ?string $entityFolder
+        DocumentDriveDestination $destination,
     ): ?array {
         $rootFolderId = config('filesystems.disks.google.folder');
 
         try {
             $service = GoogleDriveHelper::makeService();
-            $targetFolderId = GoogleDriveHelper::ensureDocumentFolder($year, $categorySlug, $entityFolder);
+            $targetFolderId = GoogleDriveHelper::ensureDocumentFolderForDestination($destination);
 
             [
                 'mimeType' => $mimeType,
@@ -147,7 +145,7 @@ trait UploadsToGoogleDrive
                     'nativeType' => $nativeType,
                     'templateId' => $templateId,
                     'driveId' => $file->getId(),
-                    'folder' => $this->buildFolderLogPath($year, $categorySlug, $entityFolder),
+                    'folder' => $this->buildFolderLogPath($destination),
                 ]);
             } else {
                 $fileMetadata = new DriveFile([
@@ -165,7 +163,7 @@ trait UploadsToGoogleDrive
                     'title' => $normalizedTitle,
                     'nativeType' => $nativeType,
                     'driveId' => $file->getId(),
-                    'folder' => $this->buildFolderLogPath($year, $categorySlug, $entityFolder),
+                    'folder' => $this->buildFolderLogPath($destination),
                 ]);
             }
 
@@ -263,11 +261,37 @@ trait UploadsToGoogleDrive
         return GoogleDriveHelper::normalizeEntityFolderName($entity->name);
     }
 
-    protected function buildFolderLogPath(int|string $year, string $categorySlug, ?string $entityFolder): string
+    protected function getStorageScope(?string $storageScope): string
     {
-        return blank($entityFolder)
-            ? "{$year}/{$categorySlug}"
-            : "{$year}/{$categorySlug}/{$entityFolder}";
+        return match ($storageScope) {
+            Document::STORAGE_SCOPE_INSTITUTIONAL => Document::STORAGE_SCOPE_INSTITUTIONAL,
+            default => Document::STORAGE_SCOPE_YEARLY,
+        };
+    }
+
+    protected function buildDriveDestination(
+        ?string $storageScope,
+        int|string|null $year,
+        string $categorySlug,
+        ?string $entityFolder,
+    ): DocumentDriveDestination {
+        return new DocumentDriveDestination(
+            storageScope: $this->getStorageScope($storageScope),
+            year: max(2010, (int) ($year ?? now()->year)),
+            categorySlug: $categorySlug,
+            entityFolder: $entityFolder,
+        );
+    }
+
+    protected function buildFolderLogPath(DocumentDriveDestination $destination): string
+    {
+        $basePath = $destination->storageScope === Document::STORAGE_SCOPE_INSTITUTIONAL
+            ? GoogleDriveHelper::getInstitutionalFolderName()
+            : (string) $destination->year;
+
+        return blank($destination->entityFolder)
+            ? "{$basePath}/{$destination->categorySlug}"
+            : "{$basePath}/{$destination->categorySlug}/{$destination->entityFolder}";
     }
 
     /**

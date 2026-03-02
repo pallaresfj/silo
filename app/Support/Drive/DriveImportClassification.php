@@ -8,6 +8,7 @@ final class DriveImportClassification
      * @param  array<string, mixed>  $metadata
      */
     public function __construct(
+        public readonly string $storageScope,
         public readonly int $year,
         public readonly string $categoryId,
         public readonly ?string $entityId,

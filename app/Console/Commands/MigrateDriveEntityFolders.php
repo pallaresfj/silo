@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Document;
+use App\Support\Drive\DocumentDriveDestination;
 use App\Support\GoogleDriveHelper;
 use Illuminate\Console\Command;
 
@@ -12,7 +13,7 @@ class MigrateDriveEntityFolders extends Command
         {--execute : Ejecuta la migración (por defecto es simulación)}
         {--limit=0 : Límite de documentos a procesar (0 = sin límite)}';
 
-    protected $description = 'Migra documentos existentes en Drive a la estructura /Año/Categoría[/Entidad]/archivo';
+    protected $description = 'Migra documentos existentes en Drive a su estructura destino anual o institucional';
 
     public function handle(): int
     {
@@ -49,10 +50,14 @@ class MigrateDriveEntityFolders extends Command
         $failed = 0;
 
         foreach ($documents as $document) {
-            $year = $document->year ?? now()->year;
-            $categorySlug = $document->category?->slug;
-            $entityName = $document->entity?->name;
-            $targetFolderId = GoogleDriveHelper::ensureDocumentFolder($year, $categorySlug, $entityName);
+            $targetFolderId = GoogleDriveHelper::ensureDocumentFolderForDestination(
+                new DocumentDriveDestination(
+                    storageScope: $document->storage_scope ?: Document::STORAGE_SCOPE_YEARLY,
+                    year: (int) ($document->year ?? now()->year),
+                    categorySlug: GoogleDriveHelper::normalizeCategorySlug($document->category?->slug),
+                    entityFolder: $document->entity?->name,
+                )
+            );
 
             if (! $execute) {
                 try {

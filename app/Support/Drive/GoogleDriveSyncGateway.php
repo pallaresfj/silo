@@ -49,7 +49,7 @@ class GoogleDriveSyncGateway implements DriveSyncGateway
         do {
             $params = [
                 'pageToken' => $nextPageToken,
-                'fields' => 'newStartPageToken,nextPageToken,changes(fileId,removed,file(id,name,mimeType,parents,trashed,webViewLink))',
+                'fields' => 'newStartPageToken,nextPageToken,changes(fileId,removed,file(id,name,mimeType,parents,trashed,webViewLink,createdTime))',
                 'supportsAllDrives' => true,
                 'includeItemsFromAllDrives' => true,
             ];
@@ -112,9 +112,9 @@ class GoogleDriveSyncGateway implements DriveSyncGateway
     {
         try {
             $file = $this->service()->files->get($fileId, [
-                'fields' => 'id,name,mimeType,parents,trashed,webViewLink',
-                'supportsAllDrives' => true,
-            ]);
+            'fields' => 'id,name,mimeType,parents,trashed,webViewLink,createdTime',
+            'supportsAllDrives' => true,
+        ]);
         } catch (\Google\Service\Exception $e) {
             $reason = $e->getErrors()[0]['reason'] ?? null;
 
@@ -129,7 +129,7 @@ class GoogleDriveSyncGateway implements DriveSyncGateway
     }
 
     /**
-     * @return list<array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null}>
+     * @return list<array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null, createdTime: string|null}>
      */
     protected function listChildren(string $parentId): array
     {
@@ -139,7 +139,7 @@ class GoogleDriveSyncGateway implements DriveSyncGateway
         do {
             $response = $this->service()->files->listFiles([
                 'q' => sprintf("'%s' in parents and trashed = false", str_replace("'", "\\'", $parentId)),
-                'fields' => 'nextPageToken,files(id,name,mimeType,parents,trashed,webViewLink)',
+                'fields' => 'nextPageToken,files(id,name,mimeType,parents,trashed,webViewLink,createdTime)',
                 'supportsAllDrives' => true,
                 'includeItemsFromAllDrives' => true,
                 'pageSize' => 1000,
@@ -157,7 +157,7 @@ class GoogleDriveSyncGateway implements DriveSyncGateway
     }
 
     /**
-     * @return array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null}
+     * @return array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null, createdTime: string|null}
      */
     protected function mapFile(DriveFile $file): array
     {
@@ -168,6 +168,7 @@ class GoogleDriveSyncGateway implements DriveSyncGateway
             'parents' => array_values(array_filter(array_map('strval', $file->getParents() ?: []))),
             'trashed' => (bool) $file->getTrashed(),
             'webViewLink' => $file->getWebViewLink() ? (string) $file->getWebViewLink() : null,
+            'createdTime' => $file->getCreatedTime() ? (string) $file->getCreatedTime() : null,
         ];
     }
 

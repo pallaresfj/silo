@@ -26,18 +26,19 @@ class CreateDocument extends CreateRecord
         unset($data['creation_mode'], $data['drive_native_type']);
         unset($data['attachment']);
 
+        $storageScope = $this->getStorageScope($data['storage_scope'] ?? null);
         $year = $data['year'] ?? now()->year;
         $categorySlug = $this->getCategorySlug($data['category_id'] ?? null);
         $entityFolder = $this->getEntityFolder($data['entity_id'] ?? null);
+        $destination = $this->buildDriveDestination($storageScope, $year, $categorySlug, $entityFolder);
+        $data['storage_scope'] = $storageScope;
 
         if ($creationMode === 'drive_native') {
             try {
                 $result = $this->createNativeDocumentInGoogleDrive(
                     $data['title'] ?? 'Documento sin titulo',
                     $driveNativeType,
-                    $year,
-                    $categorySlug,
-                    $entityFolder
+                    $destination,
                 );
 
                 if ($result) {
@@ -50,9 +51,7 @@ class CreateDocument extends CreateRecord
                     'title' => $data['title'] ?? 'N/A',
                     'native_type' => $driveNativeType,
                     'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
-                    'folder' => blank($entityFolder)
-                        ? "SGI-Doc/{$year}/{$categorySlug}"
-                        : "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
+                    'folder' => 'SGI-Doc/' . $this->buildFolderLogPath($destination),
                 ]);
             } catch (\Throwable $e) {
                 Log::error('Failed to create native document in Google Drive', [
@@ -101,9 +100,7 @@ class CreateDocument extends CreateRecord
                         $originalName,
                         $fileContents,
                         $mimeType,
-                        $year,
-                        $categorySlug,
-                        $entityFolder
+                        $destination,
                     );
 
                     if ($result) {
@@ -114,9 +111,7 @@ class CreateDocument extends CreateRecord
                     Log::info('Document uploaded to Google Drive', [
                         'file_name' => $originalName,
                         'gdrive_id' => $data['gdrive_id'] ?? 'N/A',
-                        'folder' => blank($entityFolder)
-                            ? "SGI-Doc/{$year}/{$categorySlug}"
-                            : "SGI-Doc/{$year}/{$categorySlug}/{$entityFolder}",
+                        'folder' => 'SGI-Doc/' . $this->buildFolderLogPath($destination),
                     ]);
                 } catch (\Throwable $e) {
                     Log::error('Failed to upload document to Google Drive', [

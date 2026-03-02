@@ -182,13 +182,16 @@ class DriveUnclassifiedSyncService
             'file_name' => $classification->fileName,
             'title' => $classification->title,
             'year' => $classification->year,
+            'storage_scope' => $classification->storageScope,
             'category_id' => $classification->categoryId,
             'entity_id' => $classification->entityId,
             'status' => $classification->status,
             'metadata' => array_merge($classification->metadata, [
                 'import_source' => 'drive_changes_api',
+                'import_scope' => $classification->storageScope,
                 'import_confidence' => $classification->confidence,
                 'import_path' => $relativePath,
+                'path_root_segment' => explode('/', trim($relativePath, '/'))[0] ?? null,
                 'imported_by' => 'system_sync',
             ]),
         ]);

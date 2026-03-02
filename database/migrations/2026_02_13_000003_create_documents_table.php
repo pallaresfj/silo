@@ -14,6 +14,7 @@ return new class extends Migration {
             $table->string('file_name');
             $table->string('title');
             $table->unsignedSmallInteger('year')->default(now()->year)->index();
+            $table->string('storage_scope', 32)->default('yearly')->index();
             $table->foreignUuid('category_id')
                 ->constrained('document_categories')
                 ->cascadeOnDelete();

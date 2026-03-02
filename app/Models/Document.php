@@ -16,12 +16,17 @@ class Document extends Model
 {
     use HasFactory, HasUuids, SoftDeletes;
 
+    public const STORAGE_SCOPE_YEARLY = 'yearly';
+
+    public const STORAGE_SCOPE_INSTITUTIONAL = 'institutional';
+
     protected $fillable = [
         'gdrive_id',
         'gdrive_url',
         'file_name',
         'title',
         'year',
+        'storage_scope',
         'category_id',
         'entity_id',
         'status',
@@ -67,6 +72,19 @@ class Document extends Model
     public function getDriveFolderAttribute(): string
     {
         $category = GoogleDriveHelper::normalizeCategorySlug($this->category?->slug);
+        $storageScope = $this->storage_scope ?: self::STORAGE_SCOPE_YEARLY;
+
+        if ($storageScope === self::STORAGE_SCOPE_INSTITUTIONAL) {
+            $root = 'SGI-Doc/' . GoogleDriveHelper::getInstitutionalFolderName();
+
+            if (blank($this->entity?->name)) {
+                return "{$root}/{$category}";
+            }
+
+            $entity = GoogleDriveHelper::normalizeEntityFolderName($this->entity->name);
+
+            return "{$root}/{$category}/{$entity}";
+        }
 
         if (blank($this->entity?->name)) {
             return "SGI-Doc/{$this->year}/{$category}";

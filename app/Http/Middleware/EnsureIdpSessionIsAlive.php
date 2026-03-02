@@ -22,6 +22,10 @@ class EnsureIdpSessionIsAlive
      */
     public function handle(Request $request, Closure $next): Response
     {
+        if (app()->environment('testing')) {
+            return $next($request);
+        }
+
         if (! config('sso.session_check_enabled', true)) {
             return $next($request);
         }

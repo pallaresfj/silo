@@ -83,6 +83,28 @@ class DocumentResource extends Resource
                 Section::make('Archivo')
                     ->icon('heroicon-o-paper-clip')
                     ->schema([
+                        Select::make('storage_scope')
+                            ->label('Ubicación en Drive')
+                            ->options([
+                                Document::STORAGE_SCOPE_YEARLY => 'Por año',
+                                Document::STORAGE_SCOPE_INSTITUTIONAL => 'Institucional (' . GoogleDriveHelper::getInstitutionalFolderName() . ')',
+                            ])
+                            ->default(Document::STORAGE_SCOPE_YEARLY)
+                            ->live()
+                            ->afterStateUpdated(function (Get $get, Set $set, mixed $state): void {
+                                $year = (int) ($get('year') ?? now()->year);
+                                $title = (string) ($get('title') ?? '');
+                                $yearPrefix = "{$year} - ";
+
+                                if (trim($title) === '' || preg_match('/^\d{4} - $/', $title) === 1) {
+                                    $set('title', $yearPrefix);
+                                }
+                            })
+                            ->helperText(fn (Get $get): string => ($get('storage_scope') ?? Document::STORAGE_SCOPE_YEARLY) === Document::STORAGE_SCOPE_INSTITUTIONAL
+                                ? 'Guarda el archivo en la carpeta especial ' . GoogleDriveHelper::getInstitutionalFolderName() . '. El año sigue usándose como metadato y para sugerir el prefijo del título.'
+                                : 'Guarda el archivo bajo la estructura anual existente.')
+                            ->columnSpanFull(),
+
                         Radio::make('creation_mode')
                             ->label('Como crear el archivo')
                             ->options([
@@ -193,10 +215,15 @@ class DocumentResource extends Resource
                             ]),
 
                         TextInput::make('year')
-                            ->label('Año')
+                            ->label(fn (Get $get): string => ($get('storage_scope') ?? Document::STORAGE_SCOPE_YEARLY) === Document::STORAGE_SCOPE_INSTITUTIONAL
+                                ? 'Año (metadato)'
+                                : 'Año')
                             ->numeric()
                             ->default(now()->year)
                             ->live()
+                            ->helperText(fn (Get $get): ?string => ($get('storage_scope') ?? Document::STORAGE_SCOPE_YEARLY) === Document::STORAGE_SCOPE_INSTITUTIONAL
+                                ? 'Se conserva para filtros y reportes, pero no define la carpeta física.'
+                                : null)
                             ->afterStateUpdated(function (Get $get, Set $set, mixed $state, mixed $old): void {
                                 if (! is_numeric($state)) {
                                     return;
@@ -256,6 +283,15 @@ class DocumentResource extends Resource
                     ->label('Año')
                     ->badge()
                     ->color('gray'),
+
+                TextColumn::make('storage_scope')
+                    ->label('Ubicación')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => $state === Document::STORAGE_SCOPE_INSTITUTIONAL
+                        ? 'Institucional'
+                        : 'Por año')
+                    ->color(fn (?string $state): string => $state === Document::STORAGE_SCOPE_INSTITUTIONAL ? 'info' : 'gray')
+                    ->toggleable(),
 
                 TextColumn::make('title')
                     ->label('Título')
@@ -340,6 +376,13 @@ class DocumentResource extends Resource
                             ->pluck('year', 'year')
                             ->toArray()
                     ),
+
+                SelectFilter::make('storage_scope')
+                    ->label('Ubicación')
+                    ->options([
+                        Document::STORAGE_SCOPE_YEARLY => 'Por año',
+                        Document::STORAGE_SCOPE_INSTITUTIONAL => 'Institucional',
+                    ]),
 
                 SelectFilter::make('category')
                     ->label('Categoría')

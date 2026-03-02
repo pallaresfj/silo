@@ -71,6 +71,7 @@ it('imports orphan files during bootstrap without duplicating existing records',
 
     $imported = Document::withoutGlobalScopes()->where('gdrive_id', 'new-file')->firstOrFail();
     expect($imported->status)->toBe('Importado_Sin_Clasificar');
+    expect($imported->storage_scope)->toBe(Document::STORAGE_SCOPE_YEARLY);
 
     $state = DriveSyncState::query()->where('key', 'documents_root')->firstOrFail();
     expect($state->last_start_page_token)->toBe('token-bootstrap');
@@ -225,8 +226,71 @@ it('processes incremental changes and skips non-importable records', function ()
 
     expect(Document::withoutGlobalScopes()->where('gdrive_id', 'new-file')->exists())->toBeTrue();
 
+    $imported = Document::withoutGlobalScopes()->where('gdrive_id', 'new-file')->firstOrFail();
+    expect($imported->storage_scope)->toBe(Document::STORAGE_SCOPE_YEARLY);
+
     $state = DriveSyncState::query()->where('key', 'documents_root')->firstOrFail();
     expect($state->last_start_page_token)->toBe('token-new');
+});
+
+it('imports institutional files using the institutional scope and created time year', function () {
+    createSyncCategory('Actas', 'actas');
+
+    DriveSyncState::query()->create([
+        'key' => 'documents_root',
+        'root_folder_id' => 'root-folder',
+        'shared_drive_id' => 'drive-1',
+        'last_start_page_token' => 'token-old',
+    ]);
+
+    app()->instance(DriveSyncGateway::class, new FakeDriveSyncGateway(
+        rootMetadata: ['id' => 'root-folder', 'name' => 'SGI_SILO_DOC', 'driveId' => 'drive-1'],
+        changes: [
+            [
+                'fileId' => 'institutional-file',
+                'removed' => false,
+                'file' => [
+                    'id' => 'institutional-file',
+                    'name' => 'manual.pdf',
+                    'mimeType' => 'application/pdf',
+                    'parents' => ['category-folder'],
+                    'trashed' => false,
+                    'webViewLink' => null,
+                    'createdTime' => '2024-08-10T15:20:00Z',
+                ],
+            ],
+        ],
+        newStartPageToken: 'token-new',
+        metadataById: [
+            'category-folder' => [
+                'id' => 'category-folder',
+                'name' => 'actas',
+                'mimeType' => 'application/vnd.google-apps.folder',
+                'parents' => ['institutional-folder'],
+                'trashed' => false,
+                'webViewLink' => null,
+            ],
+            'institutional-folder' => [
+                'id' => 'institutional-folder',
+                'name' => 'INSTITUCIONAL',
+                'mimeType' => 'application/vnd.google-apps.folder',
+                'parents' => ['root-folder'],
+                'trashed' => false,
+                'webViewLink' => null,
+            ],
+        ],
+    ));
+
+    $summary = app(DriveUnclassifiedSyncService::class)->sync();
+
+    expect($summary['mode'])->toBe('incremental');
+    expect($summary['imported_total'])->toBe(1);
+
+    $imported = Document::withoutGlobalScopes()->where('gdrive_id', 'institutional-file')->firstOrFail();
+    expect($imported->storage_scope)->toBe(Document::STORAGE_SCOPE_INSTITUTIONAL);
+    expect($imported->year)->toBe(2024);
+    expect($imported->metadata['import_scope'])->toBe(Document::STORAGE_SCOPE_INSTITUTIONAL);
+    expect($imported->metadata['path_root_segment'])->toBe('INSTITUCIONAL');
 });
 
 it('registers hourly scheduler with overlap protection', function () {

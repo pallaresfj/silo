@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\EntityResource\Pages;
 use App\Models\Document;
 use App\Models\Entity;
+use App\Support\Drive\DocumentDriveDestination;
 use App\Support\GoogleDriveHelper;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -152,10 +153,13 @@ class EntityResource extends Resource
         $synced = 0;
 
         foreach ($documents as $document) {
-            $targetFolderId = GoogleDriveHelper::ensureDocumentFolder(
-                $document->year ?? now()->year,
-                $document->category?->slug,
-                $newName
+            $targetFolderId = GoogleDriveHelper::ensureDocumentFolderForDestination(
+                new DocumentDriveDestination(
+                    storageScope: $document->storage_scope ?: Document::STORAGE_SCOPE_YEARLY,
+                    year: (int) ($document->year ?? now()->year),
+                    categorySlug: GoogleDriveHelper::normalizeCategorySlug($document->category?->slug),
+                    entityFolder: $newName,
+                )
             );
 
             $result = GoogleDriveHelper::moveFileToFolder((string) $document->gdrive_id, $targetFolderId);

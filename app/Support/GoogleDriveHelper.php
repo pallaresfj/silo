@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\Document;
+use App\Support\Drive\DocumentDriveDestination;
 use Google\Client;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
@@ -47,20 +49,23 @@ class GoogleDriveHelper
 
     public static function renameCategoryFoldersAcrossYears(string $oldSlug, string $newSlug): int
     {
-        $oldSlug = static::normalizeCategorySlug($oldSlug);
+        $oldCandidates = static::folderNameCandidates(
+            $oldSlug,
+            fallback: 'SIN_CLASIFICAR',
+            includeLegacy: true,
+        );
         $newSlug = static::normalizeCategorySlug($newSlug);
 
-        if ($oldSlug === $newSlug) {
+        if (in_array($newSlug, $oldCandidates, true) && count($oldCandidates) === 1) {
             return 0;
         }
 
         $service = static::makeService();
         $rootId = static::getRootFolderId();
-        $yearFolders = static::listFolders($service, $rootId);
         $renamed = 0;
 
-        foreach ($yearFolders as $yearFolder) {
-            $categoryFolder = static::findFolderByName($service, $yearFolder['id'], $oldSlug);
+        foreach (static::listManagedScopeFolders($service, $rootId) as $scopeFolder) {
+            $categoryFolder = static::findFolderByAnyName($service, $scopeFolder['id'], $oldCandidates);
 
             if (! $categoryFolder) {
                 continue;
@@ -83,23 +88,26 @@ class GoogleDriveHelper
 
     public static function renameEntityFoldersAcrossTree(string $oldEntityName, string $newEntityName): int
     {
-        $oldFolder = static::normalizeEntityFolderName($oldEntityName);
+        $oldCandidates = static::folderNameCandidates(
+            $oldEntityName,
+            fallback: 'SIN_ENTIDAD',
+            includeLegacy: true,
+        );
         $newFolder = static::normalizeEntityFolderName($newEntityName);
 
-        if ($oldFolder === $newFolder) {
+        if (in_array($newFolder, $oldCandidates, true) && count($oldCandidates) === 1) {
             return 0;
         }
 
         $service = static::makeService();
         $rootId = static::getRootFolderId();
-        $yearFolders = static::listFolders($service, $rootId);
         $renamed = 0;
 
-        foreach ($yearFolders as $yearFolder) {
-            $categoryFolders = static::listFolders($service, $yearFolder['id']);
+        foreach (static::listManagedScopeFolders($service, $rootId) as $scopeFolder) {
+            $categoryFolders = static::listFolders($service, $scopeFolder['id']);
 
             foreach ($categoryFolders as $categoryFolder) {
-                $entityFolder = static::findFolderByName($service, $categoryFolder['id'], $oldFolder);
+                $entityFolder = static::findFolderByAnyName($service, $categoryFolder['id'], $oldCandidates);
 
                 if (! $entityFolder) {
                     continue;
@@ -221,19 +229,52 @@ class GoogleDriveHelper
         throw new \RuntimeException('The service account cannot delete or trash this Drive file.');
     }
 
-    public static function ensureDocumentFolder(int|string $year, ?string $categorySlug, ?string $entityName): string
+    public static function getInstitutionalFolderName(): string
+    {
+        $name = trim((string) config('filesystems.disks.google.institutional_folder', 'INSTITUCIONAL'));
+
+        return $name !== '' ? $name : 'INSTITUCIONAL';
+    }
+
+    public static function ensureDocumentFolderForDestination(DocumentDriveDestination $destination): string
     {
         $service = static::makeService();
         $rootId = static::getRootFolderId();
 
-        $yearFolderId = static::findOrCreateFolder($service, (string) $year, $rootId);
-        $categoryFolderId = static::findOrCreateFolder($service, static::normalizeCategorySlug($categorySlug), $yearFolderId);
+        $scopeFolderId = match ($destination->storageScope) {
+            Document::STORAGE_SCOPE_INSTITUTIONAL => static::findOrCreateFolder(
+                $service,
+                static::getInstitutionalFolderName(),
+                $rootId
+            ),
+            default => static::findOrCreateFolder($service, (string) $destination->year, $rootId),
+        };
 
-        if (blank($entityName)) {
+        $categoryFolderId = static::findOrCreateFolder(
+            $service,
+            static::normalizeCategorySlug($destination->categorySlug),
+            $scopeFolderId
+        );
+
+        if (blank($destination->entityFolder)) {
             return $categoryFolderId;
         }
 
-        return static::findOrCreateFolder($service, static::normalizeEntityFolderName($entityName), $categoryFolderId);
+        return static::findOrCreateFolder(
+            $service,
+            static::normalizeEntityFolderName($destination->entityFolder),
+            $categoryFolderId
+        );
+    }
+
+    public static function ensureDocumentFolder(int|string $year, ?string $categorySlug, ?string $entityName): string
+    {
+        return static::ensureDocumentFolderForDestination(new DocumentDriveDestination(
+            storageScope: Document::STORAGE_SCOPE_YEARLY,
+            year: (int) $year,
+            categorySlug: static::normalizeCategorySlug($categorySlug),
+            entityFolder: $entityName,
+        ));
     }
 
     /**
@@ -361,16 +402,75 @@ class GoogleDriveHelper
 
     public static function normalizeEntityFolderName(?string $entityName): string
     {
-        $value = Str::slug((string) $entityName);
-
-        return $value !== '' ? $value : 'sin-entidad';
+        return static::normalizeDriveFolderName($entityName, 'SIN_ENTIDAD');
     }
 
     public static function normalizeCategorySlug(?string $categorySlug): string
     {
-        $value = Str::slug((string) $categorySlug);
+        return static::normalizeDriveFolderName($categorySlug, 'SIN_CLASIFICAR');
+    }
 
-        return $value !== '' ? $value : 'sin-clasificar';
+    public static function normalizeDriveFolderName(?string $value, string $fallback): string
+    {
+        $normalized = (string) Str::of(Str::ascii(trim((string) $value)))
+            ->replaceMatches('/[^A-Za-z0-9]+/', '_')
+            ->trim('_')
+            ->upper();
+
+        if ($normalized !== '') {
+            return $normalized;
+        }
+
+        return (string) Str::of(Str::ascii(trim($fallback)))
+            ->replaceMatches('/[^A-Za-z0-9]+/', '_')
+            ->trim('_')
+            ->upper();
+    }
+
+    protected static function isManagedScopeFolderName(string $folderName): bool
+    {
+        return static::isYearFolderName($folderName)
+            || $folderName === static::getInstitutionalFolderName();
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected static function folderNameCandidates(?string $value, string $fallback, bool $includeLegacy = false): array
+    {
+        $candidates = [
+            static::normalizeDriveFolderName($value, $fallback),
+        ];
+
+        if ($includeLegacy) {
+            $legacy = Str::slug((string) $value);
+
+            if ($legacy === '') {
+                $legacy = Str::slug($fallback);
+            }
+
+            if ($legacy !== '') {
+                $candidates[] = $legacy;
+            }
+        }
+
+        return array_values(array_unique(array_filter($candidates)));
+    }
+
+    protected static function isYearFolderName(string $folderName): bool
+    {
+        return preg_match('/^\d{4}$/', trim($folderName)) === 1;
+    }
+
+    /**
+     * @return list<array{id: string, name: string}>
+     */
+    protected static function listManagedScopeFolders(Drive $service, string $rootId): array
+    {
+        return array_values(array_filter(
+            static::listFolders($service, $rootId),
+            static fn (array $folder): bool => static::isManagedScopeFolderName((string) ($folder['name'] ?? '')),
+        ));
     }
 
     /**
@@ -426,6 +526,23 @@ class GoogleDriveHelper
             'id' => $folder->getId(),
             'name' => $folder->getName(),
         ];
+    }
+
+    /**
+     * @param  list<string>  $names
+     * @return array{id: string, name: string}|null
+     */
+    protected static function findFolderByAnyName(Drive $service, string $parentId, array $names): ?array
+    {
+        foreach ($names as $name) {
+            $folder = static::findFolderByName($service, $parentId, $name);
+
+            if ($folder !== null) {
+                return $folder;
+            }
+        }
+
+        return null;
     }
 
     protected static function escapeQueryValue(string $value): string

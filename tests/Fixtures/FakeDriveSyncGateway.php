@@ -8,9 +8,9 @@ class FakeDriveSyncGateway implements DriveSyncGateway
 {
     /**
      * @param  array{id: string, name: string, driveId: string|null}  $rootMetadata
-     * @param  list<array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null, path: string}>  $recursiveFiles
-     * @param  list<array{fileId: string, removed: bool, file: array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null}|null}>  $changes
-     * @param  array<string, array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null}>  $metadataById
+     * @param  list<array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null, createdTime?: string|null, path: string}>  $recursiveFiles
+     * @param  list<array{fileId: string, removed: bool, file: array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null, createdTime?: string|null}|null}>  $changes
+     * @param  array<string, array{id: string, name: string, mimeType: string, parents: list<string>, trashed: bool, webViewLink: string|null, createdTime?: string|null}>  $metadataById
      */
     public function __construct(
         public array $rootMetadata,
