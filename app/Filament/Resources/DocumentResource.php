@@ -365,6 +365,8 @@ class DocumentResource extends Resource
             ->groupingSettingsHidden()
             ->groupingDirectionSettingHidden()
             ->defaultSort('updated_at', 'desc')
+            ->paginationPageOptions([10, 20, 50, 100, 200])
+            ->defaultPaginationPageOption(10)
             ->filters([
                 SelectFilter::make('year')
                     ->label('Año')
