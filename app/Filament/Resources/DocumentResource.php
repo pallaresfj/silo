@@ -9,6 +9,7 @@ use App\Models\Entity;
 use App\Support\GoogleDriveHelper;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -254,13 +255,7 @@ class DocumentResource extends Resource
 
                         Select::make('status')
                             ->label('Estado')
-                            ->options([
-                                'Borrador' => 'Borrador',
-                                'Publicado' => 'Publicado',
-                                'Archivado' => 'Archivado',
-                                'Pendiente_OCR' => 'Pendiente OCR',
-                                'Importado_Sin_Clasificar' => 'Importado Sin Clasificar',
-                            ])
+                            ->options(static::getDocumentStatusOptions())
                             ->default('Borrador')
                             ->required(),
 
@@ -420,13 +415,7 @@ class DocumentResource extends Resource
 
                 SelectFilter::make('status')
                     ->label('Estado')
-                    ->options([
-                        'Borrador' => 'Borrador',
-                        'Publicado' => 'Publicado',
-                        'Archivado' => 'Archivado',
-                        'Pendiente_OCR' => 'Pendiente OCR',
-                        'Importado_Sin_Clasificar' => 'Importado Sin Clasificar',
-                    ]),
+                    ->options(static::getDocumentStatusOptions()),
 
                 TrashedFilter::make(),
             ])
@@ -512,6 +501,94 @@ class DocumentResource extends Resource
             ])
             ->bulkActions([
                 BulkActionGroup::make([
+                    BulkAction::make('bulkUpdateAttributes')
+                        ->label('Actualizar seleccionados')
+                        ->icon('heroicon-o-pencil-square')
+                        ->modalHeading('Actualizar documentos seleccionados')
+                        ->modalDescription('Solo se modificarán los campos que diligencies. Si dejas un campo vacío, se conservará su valor actual. Los documentos en papelera no se actualizarán.')
+                        ->modalSubmitActionLabel('Aplicar cambios')
+                        ->fetchSelectedRecords()
+                        ->deselectRecordsAfterCompletion()
+                        ->visible(fn (): bool => auth()->user()?->hasPermission('documents.update') ?? false)
+                        ->authorizeIndividualRecords('update')
+                        ->form([
+                            Select::make('status')
+                                ->label('Estado')
+                                ->options(static::getDocumentStatusOptions()),
+                            Select::make('category_id')
+                                ->label('Categoría')
+                                ->relationship('category', 'name')
+                                ->searchable()
+                                ->preload(),
+                            Select::make('entity_mode')
+                                ->label('Cambio de entidad')
+                                ->options([
+                                    'keep' => 'No cambiar',
+                                    'set' => 'Asignar entidad',
+                                    'clear' => 'Quitar entidad',
+                                ])
+                                ->default('keep')
+                                ->live(),
+                            Select::make('entity_id')
+                                ->label('Entidad')
+                                ->relationship('entity', 'name')
+                                ->searchable()
+                                ->preload()
+                                ->visible(fn (Get $get): bool => ($get('entity_mode') ?? 'keep') === 'set')
+                                ->required(fn (Get $get): bool => ($get('entity_mode') ?? 'keep') === 'set'),
+                        ])
+                        ->action(function (EloquentCollection | Collection | LazyCollection $records, array $data): void {
+                            $selectedRecords = $records instanceof EloquentCollection
+                                ? $records
+                                : new EloquentCollection($records->all());
+
+                            $payload = static::buildBulkUpdatePayload($data);
+
+                            if ($payload === []) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('No se aplicaron cambios')
+                                    ->body('Debes seleccionar al menos un estado, una categoría o un cambio de entidad.')
+                                    ->send();
+
+                                return;
+                            }
+
+                            /** @var EloquentCollection<int, Document> $eligibleRecords */
+                            $eligibleRecords = $selectedRecords->filter(
+                                fn (Document $record): bool => $record->deleted_at === null
+                            );
+                            $skippedCount = $selectedRecords->count() - $eligibleRecords->count();
+
+                            if ($eligibleRecords->isEmpty()) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('No se actualizaron documentos')
+                                    ->body('Los documentos seleccionados están en papelera. Debes restaurarlos antes de editarlos en bloque.')
+                                    ->send();
+
+                                return;
+                            }
+
+                            Document::query()
+                                ->whereKey($eligibleRecords->modelKeys())
+                                ->update($payload);
+
+                            $updatedCount = $eligibleRecords->count();
+                            $updatedLabel = Str::plural('documento', $updatedCount);
+                            $body = "{$updatedCount} {$updatedLabel} actualizados.";
+
+                            if ($skippedCount > 0) {
+                                $skippedLabel = Str::plural('documento', $skippedCount);
+                                $body .= " {$skippedCount} {$skippedLabel} omitidos por estar en papelera.";
+                            }
+
+                            Notification::make()
+                                ->success()
+                                ->title('Documentos actualizados')
+                                ->body($body)
+                                ->send();
+                        }),
                     DeleteBulkAction::make()
                         ->label('Archivar seleccionados'),
                     ForceDeleteBulkAction::make()
@@ -560,6 +637,49 @@ class DocumentResource extends Resource
         }
 
         GoogleDriveHelper::deleteOrTrashFile($record->gdrive_id);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected static function getDocumentStatusOptions(): array
+    {
+        return [
+            'Borrador' => 'Borrador',
+            'Publicado' => 'Publicado',
+            'Archivado' => 'Archivado',
+            'Pendiente_OCR' => 'Pendiente OCR',
+            'Importado_Sin_Clasificar' => 'Importado Sin Clasificar',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected static function buildBulkUpdatePayload(array $data): array
+    {
+        $payload = [];
+
+        if (filled($data['status'] ?? null)) {
+            $payload['status'] = $data['status'];
+        }
+
+        if (filled($data['category_id'] ?? null)) {
+            $payload['category_id'] = $data['category_id'];
+        }
+
+        $entityMode = $data['entity_mode'] ?? 'keep';
+
+        if ($entityMode === 'set' && filled($data['entity_id'] ?? null)) {
+            $payload['entity_id'] = $data['entity_id'];
+        }
+
+        if ($entityMode === 'clear') {
+            $payload['entity_id'] = null;
+        }
+
+        return $payload;
     }
 
     protected static function resolveDocumentTypeIcon(?string $fileName): string
