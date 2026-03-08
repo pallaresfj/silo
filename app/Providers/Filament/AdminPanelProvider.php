@@ -5,7 +5,6 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\HomeDashboard;
 use App\Filament\Auth\Login;
 use App\Http\Middleware\EnsureIdpSessionIsAlive;
-use App\Support\Institution\InstitutionTheme;
 use Filament\Enums\UserMenuPosition;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -32,7 +31,13 @@ class AdminPanelProvider extends PanelProvider
             ->login(Login::class)
             ->profile(null)
             ->userMenu(position: UserMenuPosition::Sidebar)
-            ->colors(InstitutionTheme::filamentColors())
+            ->colors([
+                'primary' => '#1d6362',
+                'success' => '#6b9a34',
+                'info' => '#99ce93',
+                'warning' => '#f8c508',
+                'danger' => '#f50404',
+            ])
             ->favicon(asset('images/favicon.png'))
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
