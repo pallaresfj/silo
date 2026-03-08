@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Services\Sso\OidcClient;
+use Agroista\Core\Sso\OidcClient;
 use Filament\Facades\Filament;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -109,6 +109,7 @@ class SsoController extends Controller
         $email = Str::lower(trim((string) ($claims['email'] ?? '')));
         $name = trim((string) ($claims['name'] ?? $email));
         $subject = trim((string) ($claims['sub'] ?? ''));
+        $institutionCode = trim((string) ($claims['institution_code'] ?? config('sso.institution_code', 'default')));
         $isActive = array_key_exists('is_active', $claims) ? (bool) $claims['is_active'] : true;
         $avatarCandidate = trim((string) ($claims['picture'] ?? $claims['avatar'] ?? $claims['google_avatar_url'] ?? ''));
         $googleAvatarUrl = filter_var($avatarCandidate, FILTER_VALIDATE_URL) ? $avatarCandidate : null;
@@ -131,9 +132,12 @@ class SsoController extends Controller
             ['email' => $email],
             array_filter([
                 'name' => $name === '' ? $email : $name,
+                'auth_subject' => $subject,
+                'institution_code' => $institutionCode !== '' ? $institutionCode : null,
                 'google_subject' => $subject,
                 'google_avatar_url' => $googleAvatarUrl,
                 'last_google_login_at' => now(),
+                'last_sso_login_at' => now(),
                 'password' => $alreadyExists ? null : Hash::make(Str::password(40)),
                 'email_verified_at' => $alreadyExists ? null : now(),
             ], static fn (mixed $value): bool => $value !== null),
@@ -253,6 +257,7 @@ class SsoController extends Controller
 
         $email = Str::lower(trim((string) ($claims['email'] ?? '')));
         $subject = trim((string) ($claims['sub'] ?? ''));
+        $institutionCode = trim((string) ($claims['institution_code'] ?? config('sso.institution_code', 'default')));
         $isActive = array_key_exists('is_active', $claims) ? (bool) $claims['is_active'] : true;
 
         if ($email === '' || $subject === '' || ! $isActive) {
@@ -264,6 +269,10 @@ class SsoController extends Controller
         }
 
         if (filled($user->google_subject) && ! hash_equals((string) $user->google_subject, $subject)) {
+            return $this->logoutForExpiredIdpSession($request);
+        }
+
+        if (filled($user->auth_subject) && ! hash_equals((string) $user->auth_subject, $subject)) {
             return $this->logoutForExpiredIdpSession($request);
         }
 
@@ -279,7 +288,10 @@ class SsoController extends Controller
             $user->google_avatar_url = $googleAvatarUrl;
         }
 
+        $user->auth_subject = $subject;
+        $user->institution_code = $institutionCode !== '' ? $institutionCode : $user->institution_code;
         $user->last_google_login_at = now();
+        $user->last_sso_login_at = now();
         $user->save();
 
         $request->session()->put(self::SESSION_CHECK_LAST_AT, now()->timestamp);

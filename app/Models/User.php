@@ -26,12 +26,15 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     protected $fillable = [
         'name',
         'email',
+        'auth_subject',
+        'institution_code',
         'google_subject',
         'password',
         'avatar_url',
         'google_avatar_url',
         'role',
         'last_google_login_at',
+        'last_sso_login_at',
     ];
 
     /**
@@ -55,6 +58,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_google_login_at' => 'datetime',
+            'last_sso_login_at' => 'datetime',
         ];
     }
 
